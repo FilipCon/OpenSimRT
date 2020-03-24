@@ -78,6 +78,10 @@ void run() {
     // visualizer
     BasicModelVisualizer visualizer(model);
 
+    // prepare benchmark session
+    Instrumentor::Get().BeginSession("Muscle Optimization.",
+            subjectDir + "real_time/muscle_optimization/muscle_optimization.json");
+
     // mean delay
     int sumDelayMS = 0;
 
@@ -117,6 +121,7 @@ void run() {
                           subjectDir + "real_time/muscle_optimization/fm.sto");
     STOFileAdapter::write(amLogger,
                           subjectDir + "real_time/muscle_optimization/am.sto");
+    Instrumentor::Get().EndSession();
 }
 
 int main(int argc, char* argv[]) {

@@ -10,6 +10,7 @@
 
 #include "internal/CommonExports.h"
 
+#include <fstream>
 #include <iomanip>
 #include <limits>
 #include <sstream>

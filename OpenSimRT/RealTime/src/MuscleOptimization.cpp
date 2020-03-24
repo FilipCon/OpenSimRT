@@ -57,6 +57,7 @@ MuscleOptimization::MuscleOptimization(
 
 MuscleOptimization::Output
 MuscleOptimization::solve(const MuscleOptimization::Input& input) {
+    PROFILE_FUNCTION();
     try {
         target->prepareForOptimization(input);
         optimizer->optimize(parameterSeeds);
@@ -116,6 +117,7 @@ TorqueBasedTarget::TorqueBasedTarget(Model* model, int objectiveExponent,
 
 void TorqueBasedTarget::prepareForOptimization(
         const MuscleOptimization::Input& input) {
+    PROFILE_FUNCTION();
     tau = input.tau(6, input.tau.size() - 6);
     R = calcMomentArm(input.q);
     R = R(6, 0, R.nrow() - 6, R.ncol());
@@ -127,6 +129,7 @@ Vector TorqueBasedTarget::extractMuscleForces(const Vector& x) const {
 
 int TorqueBasedTarget::objectiveFunc(const Vector& x, bool newCoefficients,
                                      Real& rP) const {
+    PROFILE_FUNCTION();
     rP = 0.0;
     for (int i = 0; i < getNumParameters(); ++i) {
         rP += pow(x[i] / fMax[i], p);
@@ -144,12 +147,14 @@ int TorqueBasedTarget::gradientFunc(const Vector& x, bool newCoefficients,
 
 int TorqueBasedTarget::constraintFunc(const Vector& x, bool newCoefficients,
                                       Vector& constraints) const {
+    PROFILE_FUNCTION();
     constraints = R * x - tau;
     return 0;
 }
 
 int TorqueBasedTarget::constraintJacobian(const Vector& x, bool newCoefficients,
                                           Matrix& jac) const {
+    PROFILE_FUNCTION();
     jac = R;
     return 0;
 }
