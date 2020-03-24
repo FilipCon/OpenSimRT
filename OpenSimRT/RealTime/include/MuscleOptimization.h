@@ -74,12 +74,15 @@ class RealTime_API TorqueBasedTarget : public SimTK::OptimizerSystem {
     SimTK::Matrix R;
     SimTK::Vector fMax, tau;
     MomentArmFunctionT calcMomentArm;
+    int nma;
+    SimTK::Matrix W;
 
  public:
     TorqueBasedTarget(OpenSim::Model* model, int objectiveExponent,
                       const MomentArmFunctionT& momentArmFunction);
     void prepareForOptimization(const MuscleOptimization::Input& input);
     SimTK::Vector extractMuscleForces(const SimTK::Vector& x) const;
+    SimTK::Vector extractResidualForces(const SimTK::Vector& x) const;
 
  protected:
     int objectiveFunc(const SimTK::Vector& x, bool newCoefficients,
