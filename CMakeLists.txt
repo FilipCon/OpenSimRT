@@ -42,6 +42,12 @@ if(CONTINUOUS_INTEGRATION)
   add_definitions(-DCONTINUOUS_INTEGRATION)
 endif()
 
+# run benchmarks
+option(RUN_BENCHMARKS "Run Benchmarks" ON)
+if(RUN_BENCHMARKS)
+    add_definitions(-DPROFILING)
+endif()
+
 # group targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
