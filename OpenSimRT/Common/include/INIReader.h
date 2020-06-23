@@ -10,6 +10,8 @@
 #ifndef INI_READER_H
 #define INI_READER_H
 
+#include <type_traits>
+#include <vector>
 #include <map>
 #include <string>
 #include "internal/CommonExports.h"
@@ -40,7 +42,38 @@ public:
     // "on", "1", and valid false values are "false", "no", "off", "0" (not case
     // sensitive).
     bool getBoolean(std::string section, std::string name, bool default_value);
-private:
+
+    template <typename T>
+    std::vector<T> getVector(std::string section, std::string name,
+                             std::vector<T> default_value) {
+        std::string key = makeKey(section, name);
+
+        auto separate = [](std::string str, std::string&& delimiter) {
+            std::vector<T> result;
+            std::string token;
+            size_t pos = 0;
+            str += delimiter; // to get the last token
+            while ((pos = str.find(delimiter)) != std::string::npos) {
+                token = str.substr(0, pos);
+                if constexpr (std::is_same<T, std::string>::value) {
+                    result.push_back(token);
+                } else if constexpr (std::is_same<T, int>::value) {
+                    const char* value = token.c_str();
+                    char* end;
+                    result.push_back(strtol(value, &end, 0));
+                } else if constexpr (std::is_same<T, double>::value) {
+                    const char* value = token.c_str();
+                    char* end;
+                    result.push_back(strtod(value, &end));
+                }
+                str.erase(0, pos + delimiter.length());
+            }
+            return result;
+        };
+        return _values.count(key) ? separate(_values[key], " ") : default_value;
+    }
+
+ private:
     std::map<std::string, std::string> _values;
     int _error;
     static std::string makeKey(std::string section, std::string name);
