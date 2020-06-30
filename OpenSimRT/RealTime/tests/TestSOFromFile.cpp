@@ -9,6 +9,7 @@
  */
 #include "Exception.h"
 #include "INIReader.h"
+#include "MuscleOptimization.h"
 #include "OpenSimUtils.h"
 #include "Settings.h"
 #include "Simulation.h"
@@ -70,7 +71,7 @@ void run() {
     optimizationParameters.convergenceTolerance = convergenceTolerance;
     optimizationParameters.maximumIterations = maximumIterations;
     optimizationParameters.objectiveExponent = objectiveExponent;
-    MuscleOptimization so(model, optimizationParameters, calcMomentArm);
+    MuscleOptimization so(model, optimizationParameters, calcMomentArm, new TorqueBasedTargetLinearMuscle());
     auto fmLogger = so.initializeMuscleLogger();
     auto amLogger = so.initializeMuscleLogger();
     // auto tauResLogger = so.initializeResidualLogger();

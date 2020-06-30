@@ -89,9 +89,11 @@ void BasicModelVisualizer::update(const Vector& q,
     // TODO handle path actuators
     if (muscleActivations.size() == model.getMuscles().getSize()) {
         for (int i = 0; i < model.getMuscles().getSize(); ++i) {
-            // model.updMuscles().get(i).setActivation(state, muscleActivations[i]);
-            model.updMuscles().get(i).getGeometryPath()
-                .setColor(state, Vec3(muscleActivations[i], 0, 1 - muscleActivations[i]));
+            // model.updMuscles().get(i).setActivation(state,
+            // muscleActivations[i]);
+            model.updMuscles().get(i).getGeometryPath().setColor(
+                    state,
+                    Vec3(muscleActivations[i], 0, 1 - muscleActivations[i]));
         }
     }
 #ifndef CONTINUOUS_INTEGRATION
@@ -106,10 +108,21 @@ void BasicModelVisualizer::update(const Vector& q,
 #endif
 }
 
-void BasicModelVisualizer::addDecorationGenerator(DecorationGenerator* generator) {
+void BasicModelVisualizer::addDecorationGenerator(
+        DecorationGenerator* generator) {
 #ifndef CONTINUOUS_INTEGRATION
     visualizer->addDecorationGenerator(generator);
 #endif
 }
 
+void BasicModelVisualizer::expressPositionInGround(
+        const std::string& fromBodyName, const SimTK::Vec3& fromBodyPoint,
+        SimTK::Vec3& toBodyPoint) {
+#ifndef CONTINUOUS_INTEGRATION
+    model.realizePosition(state);
+    model.getSimbodyEngine().transformPosition(
+            state, model.getBodySet().get(fromBodyName), fromBodyPoint,
+            model.getGround(), toBodyPoint);
+#endif // CONTINUOUS_INTEGRATION
+}
 /******************************************************************************/

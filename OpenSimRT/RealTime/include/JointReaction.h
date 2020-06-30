@@ -14,13 +14,13 @@
 #include <OpenSim/Simulation/Model/Model.h>
 
 namespace OpenSimRT {
-    /**
-     * \brief Calculates the joint reaction loads as applied on child bodies
-     * expressed in ground.
-     *
-     * TODO: implement re-express in different frame of interest
-     */
-    class RealTime_API JointReaction {
+/**
+ * \brief Calculates the joint reaction loads as applied on child bodies
+ * expressed in ground.
+ *
+ * TODO: implement re-express in different frame of interest
+ */
+class RealTime_API JointReaction {
  public:
     struct Input {
         double t;
@@ -47,10 +47,17 @@ namespace OpenSimRT {
 
  public:
     JointReaction(
-        const OpenSim::Model& model,
+            const OpenSim::Model& model,
             const std::vector<ExternalWrench::Parameters>& wrenchParameters);
     Output solve(const Input& input);
     SimTK::Vector asForceMomentPoint(const Output& jrOutput);
+
+    /**
+     * Initialize joint reaction analysis log storage. Use this to create a
+     * TimeSeriesTable that can be appended with the computed joint reaction
+     * loads.
+     */
+    OpenSim::TimeSeriesTable initializeLogger();
 };
 } // namespace OpenSimRT
 #endif

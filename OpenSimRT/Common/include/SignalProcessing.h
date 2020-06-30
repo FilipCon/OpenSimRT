@@ -11,7 +11,8 @@
 #include "internal/CommonExports.h"
 
 #include <SimTKcommon.h>
-
+#include <condition_variable>
+#include <mutex>
 namespace OpenSimRT {
 
 /**
@@ -46,11 +47,11 @@ namespace OpenSimRT {
 class Common_API LowPassSmoothFilter {
  public: /* public data structures */
     struct Parameters {
-        int numSignals;   // number of signals that are filtered
-        int memory;       // memory buffer of the filter
-        double cutoffFrequency; // low pass cutoff frequency
-        int delay;              // sample delay to evaluate the result
-        int splineOrder;        // spline order use 3
+        int numSignals;            // number of signals that are filtered
+        int memory;                // memory buffer of the filter
+        double cutoffFrequency;    // low pass cutoff frequency
+        int delay;                 // sample delay to evaluate the result
+        int splineOrder;           // spline order use 3
         bool calculateDerivatives; // whether to calculate derivatives
     };
     struct Input {
@@ -62,7 +63,7 @@ class Common_API LowPassSmoothFilter {
         SimTK::Vector x;
         SimTK::Vector xDot;
         SimTK::Vector xDDot;
-        bool isValid;           // requires at least # memory samples
+        bool isValid; // requires at least # memory samples
     };
 
  public: /* public interface */
@@ -74,6 +75,57 @@ class Common_API LowPassSmoothFilter {
     SimTK::Matrix time;
     SimTK::Matrix data;
     int initializationCounter;
+};
+
+/**
+ * An thread safe implementation using mutexes and conditional variables of the
+ * lowPassFilter
+ */
+class Common_API LowPassSmoothFilterTS {
+ public: /* public data structures */
+    struct Parameters {
+        int numSignals;            // number of signals that are filtered
+        int memory;                // memory buffer of the filter
+        double cutoffFrequency;    // low pass cutoff frequency
+        int delay;                 // sample delay to evaluate the result
+        int splineOrder;           // spline order use 3
+        bool calculateDerivatives; // whether to calculate derivatives
+    };
+    struct Input {
+        double t;
+        SimTK::Vector x;
+    };
+    struct Output {
+        double t;
+        SimTK::Vector x;
+        SimTK::Vector xDot;
+        SimTK::Vector xDDot;
+        // bool isValid;           // requires at least # memory samples
+    } output;
+
+    // thread synchronization parameters
+    bool newDataReady = false;
+    std::condition_variable cond;
+
+ public: /* public interface */
+    LowPassSmoothFilterTS(const Parameters& parameters);
+    ~LowPassSmoothFilterTS();
+    void updState(Input&& input);
+    Output filter();
+
+ private: /* private data members */
+    Parameters parameters;
+    SimTK::Matrix time;
+    SimTK::Matrix data;
+    int initializationCounter;
+
+    int M, D, N;
+    double dt, dtPrev;
+    double* xRaw;
+    double* xFiltered;
+
+    std::mutex monitor;
+    bool dataMatrixReady = false;
 };
 
 /**

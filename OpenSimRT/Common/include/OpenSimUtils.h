@@ -136,6 +136,9 @@ typedef SimTK::Matrix (*MomentArmFunctionT)(const SimTK::Vector& q);
 struct Common_API OpenSimUtils {
     // Generates a unique identifier
     static int generateUID();
+    // Extract model's joint names.
+    static std::vector<std::string>
+    getJointNames(const OpenSim::Model& model);
     // Extract model's coordinate names in multibody tree order.
     static std::vector<std::string>
     getCoordinateNamesInMultibodyTreeOrder(const OpenSim::Model& model);

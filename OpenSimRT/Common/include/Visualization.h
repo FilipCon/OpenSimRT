@@ -84,6 +84,9 @@ class Common_API BasicModelVisualizer {
     // Add decoration generator to the visualizer (take ownership of the
     // memory).
     void addDecorationGenerator(SimTK::DecorationGenerator* generator);
+    void expressPositionInGround(const std::string& fromBodyName,
+                                 const SimTK::Vec3& fromBodyPoint,
+                                 SimTK::Vec3& toBodyPoint);
 
  private:
     OpenSim::Model model;

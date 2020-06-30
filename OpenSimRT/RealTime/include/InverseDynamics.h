@@ -107,8 +107,8 @@ class RealTime_API InverseDynamics {
      * TimeSeriesTable that can be appended with the computed generalized
      * forces.
      */
-    OpenSim::TimeSeriesTable initializeLogger();
 
+    OpenSim::TimeSeriesTable initializeLogger();
  private: /* private data members */
     OpenSim::Model model;
     SimTK::State state;

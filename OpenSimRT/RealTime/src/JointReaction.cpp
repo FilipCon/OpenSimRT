@@ -17,9 +17,9 @@ using namespace SimTK;
 /*******************************************************************************/
 
 JointReaction::JointReaction(
-    const OpenSim::Model& otherModel,
-    const vector<ExternalWrench::Parameters>& wrenchParameters)
-    : model(*otherModel.clone()) {
+        const OpenSim::Model& otherModel,
+        const vector<ExternalWrench::Parameters>& wrenchParameters)
+        : model(*otherModel.clone()) {
     // add externally applied forces
     for (int i = 0; i < wrenchParameters.size(); ++i) {
         auto wrench = new ExternalWrench(wrenchParameters[i]);
@@ -84,7 +84,8 @@ JointReaction::asForceMomentPoint(const JointReaction::Output& jrOutput) {
 
     Vector out(nj * 9);
     for (int i = 0; i < nj; ++i) {
-        auto jointReaction = joints[i].calcReactionOnChildExpressedInGround(state);
+        auto jointReaction =
+                joints[i].calcReactionOnChildExpressedInGround(state);
 
         // find the point of application in immediate child frame, then
         // transform to the base frame of the child (expressedInBody)
@@ -110,6 +111,29 @@ JointReaction::asForceMomentPoint(const JointReaction::Output& jrOutput) {
         out[i * 9 + 8] = pointOfApplication[2];
     }
     return out;
+}
+
+TimeSeriesTable JointReaction::initializeLogger() {
+    vector<string> columnNames;
+    for (int i = 0; i < model.getNumJoints(); ++i) {
+        const auto& joint = model.getJointSet()[i];
+        auto label = joint.getName() + "_on_" +
+                     joint.getChildFrame().findBaseFrame().getName() +
+                     "_in_ground";
+        columnNames.push_back(label + "_fx");
+        columnNames.push_back(label + "_fy");
+        columnNames.push_back(label + "_fz");
+        columnNames.push_back(label + "_mx");
+        columnNames.push_back(label + "_my");
+        columnNames.push_back(label + "_mz");
+        columnNames.push_back(label + "_px");
+        columnNames.push_back(label + "_py");
+        columnNames.push_back(label + "_pz");
+    }
+
+    TimeSeriesTable table;
+    table.setColumnLabels(columnNames);
+    return table;
 }
 
 /*******************************************************************************/

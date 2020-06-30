@@ -1,5 +1,5 @@
 #include "SignalProcessing.h"
-
+#include "Profile.h"
 #include "Exception.h"
 #include "Utils.h"
 #include <SimTKcommon/Scalar.h>
@@ -141,6 +141,116 @@ LowPassSmoothFilter::filter(const LowPassSmoothFilter::Input& input) {
         delete[] xFiltered;
     }
 
+    return output;
+}
+
+/******************************************************************************/
+LowPassSmoothFilterTS::LowPassSmoothFilterTS(const Parameters& parameters)
+
+        : parameters(parameters), initializationCounter(parameters.memory - 1) {
+    ENSURE_POSITIVE(parameters.numSignals);
+    // at least 5 slots to define derivatives (5 - 4 > 0)
+    ENSURE_POSITIVE(parameters.memory - 4);
+    ENSURE_POSITIVE(parameters.cutoffFrequency);
+    // if we need time derivatives then we are between [2, M - 2]
+    ENSURE_BOUNDS(parameters.delay, 2, parameters.memory - 2);
+    if (parameters.calculateDerivatives) {
+        ENSURE_BOUNDS(parameters.splineOrder, 1, 7);
+        if (parameters.splineOrder % 2 == 0) {
+            THROW_EXCEPTION("spline order should be an odd number between 1 and 7");
+        }
+    }
+
+    // initialize variables
+    N = parameters.numSignals;
+    M = parameters.memory;
+    D = parameters.delay;
+
+    time = Matrix(1, M, 0.0);
+    data = Matrix(N, M, 0.0);
+
+    output.x = Vector(N);
+    output.xDot = Vector(N);
+    output.xDDot = Vector(N);
+
+    xRaw = new double[M];
+    xFiltered = new double[M];
+
+}
+LowPassSmoothFilterTS::~LowPassSmoothFilterTS(){
+    // free allocated memory
+    delete[] xRaw;
+    delete[] xFiltered;
+}
+
+void
+LowPassSmoothFilterTS::updState(LowPassSmoothFilterTS::Input&& input) {
+    PROFILE_FUNCTION();
+    {
+        // lock
+        lock_guard<mutex> locker(monitor);
+
+        // shift data column left and set last column as the new data
+        shiftColumnsLeft(std::forward<Vector>(Vector(1, input.t)), time);
+        shiftColumnsLeft(std::forward<Vector>(input.x), data);
+
+        // check if initialized and set ready state
+        if (initializationCounter > 0) {
+            initializationCounter--;
+        } else {
+            dataMatrixReady = true;
+        }
+        newDataReady = true;
+    }
+
+    // notify after unlocking
+    cond.notify_one();
+}
+
+LowPassSmoothFilterTS::Output
+LowPassSmoothFilterTS::filter() {
+    PROFILE_FUNCTION();
+
+    std::unique_lock<std::mutex> lock(monitor);
+    cond.wait(lock, [&]() { return dataMatrixReady && newDataReady; });
+
+    dt = time[0][M - 1] - time[0][M - 2];
+    dtPrev = time[0][M - 2] - time[0][M - 3];
+
+    // check if dt is consistent
+    if (abs(dt - dtPrev) > 1e-5) {
+        // THROW_EXCEPTION("signal sampling frequency is not constant");
+        cerr << "WARNING: signal sampling frequency is not constant at time: "
+             << time[0][M - 1] <<  endl;
+    }
+
+    // output
+    output.t = time[0][M - D - 1];
+
+    // filter
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < M; ++j) { xRaw[j] = data[i][j]; }
+
+        // apply a low pass filter
+        OpenSim::Signal::LowpassFIR(parameters.memory / 2, dt,
+                                    parameters.cutoffFrequency, M, xRaw,
+                                    xFiltered);
+
+        // calculate smooth splines
+        if (parameters.calculateDerivatives) {
+            OpenSim::GCVSpline spline(parameters.splineOrder, M, &time[0][0],
+                                      xFiltered);
+            output.x[i] = spline.calcValue(Vector(1, output.t));
+            output.xDot[i] = spline.calcDerivative({0}, Vector(1, output.t));
+            output.xDDot[i] =
+                    spline.calcDerivative({0, 0}, Vector(1, output.t));
+        } else {
+            output.x[i] = xFiltered[M - D - 1];
+        }
+    }
+
+    // do not filter the same data twice
+    newDataReady = false;
     return output;
 }
 

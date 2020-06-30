@@ -17,20 +17,21 @@
 namespace OpenSimRT {
 
 // forward declaration
-class TorqueBasedTarget;
+class OptimizationTarget;
+
+typedef std::function<SimTK::Matrix(const SimTK::Vector& q)> MomentArmFunction;
 
 /**
- * \brief Solves the muscle optimization problem.
+ * \brief Solves the muscle optimization problem for non-linear muscle model.
  */
 class RealTime_API MuscleOptimization {
  public:
-    OpenSim::Model model;
-    SimTK::ReferencePtr<SimTK::Optimizer> optimizer;
-    SimTK::ReferencePtr<TorqueBasedTarget> target;
-    SimTK::Vector parameterSeeds;
+    SimTK::Vector parameterSeeds; // controls to minimize
+
     struct Input {
         double t;
         SimTK::Vector q;
+        SimTK::Vector qdot;
         SimTK::Vector tau;
     };
     struct Output {
@@ -40,21 +41,81 @@ class RealTime_API MuscleOptimization {
         SimTK::Vector residuals;
     };
     struct OptimizationParameters {
-        double convergenceTolerance; // 1e-0
-        int maximumIterations;       // 50
-        int objectiveExponent;       // 2
+        SimTK::OptimizerAlgorithm algorithm =
+                SimTK::OptimizerAlgorithm::InteriorPoint;
+        double convergenceTolerance =
+                1e-6; // set 1e-0 for linear muscle, 1e-6 for non-linear
+        int maximumIterations = 50;
+        int objectiveExponent = 2;
     };
+
+ private:
+    OpenSim::Model model;
+    SimTK::ReferencePtr<OptimizationTarget> target;  // system for optimization
+    SimTK::ReferencePtr<SimTK::Optimizer> optimizer; // target-based optimizer
 
  public:
     MuscleOptimization(const OpenSim::Model& model,
                        const OptimizationParameters& optimizationParameters,
-                       const MomentArmFunctionT& momentArmFunction);
+                       const MomentArmFunction& momentArmFunction,
+                       OptimizationTarget* optimizationTarget);
+
+    // solve optimization problem
     Output solve(const Input& input);
+
     /**
      * Initialize muscle optimization log storage. Use this to create a
      * TimeSeriesTable that can be appended with the computed kinematics.
      */
     OpenSim::TimeSeriesTable initializeMuscleLogger();
+};
+
+/*******************************************************************************/
+/**
+ * @brief Base class for Optimization targets.
+ *
+ */
+class RealTime_API OptimizationTarget : public SimTK::OptimizerSystem {
+    friend class MuscleOptimization;
+
+ protected:
+    SimTK::ReferencePtr<OpenSim::Model>
+            model; // pointer to MuscleOptimization::model
+    SimTK::State state;
+
+    int p;   // objectiveExponent
+    int nma; // counter of muscle actuators
+
+    SimTK::Matrix R;    // moment arm
+    SimTK::Vector xMax; // xMax = [am_max; F^opt_coordAct]
+    SimTK::Vector tau, fmMax;
+
+    MomentArmFunction calcMomentArm; // model-specific function
+
+    // Model muscles and coordinates that are used.
+    std::vector<int> activeMuscleIndices, activeCoordinateIndices;
+
+ public:
+    OptimizationTarget() = default;
+    virtual ~OptimizationTarget() = default;
+
+ private:
+    // different target implementations, require different upper bounds.
+    // (Goal: maximize code reuse.)
+    virtual double setUpperBound(const OpenSim::Muscle* m) = 0;
+
+    // on demand "contruction" of the target object inside MuscleOptimization
+    // class
+    void build();
+
+ protected:
+    virtual void
+    prepareForOptimization(const MuscleOptimization::Input& input) = 0;
+    virtual SimTK::Vector
+    extractMuscleActivations(const SimTK::Vector& x) const = 0;
+    virtual SimTK::Vector extractMuscleForces(const SimTK::Vector& x) const = 0;
+    virtual SimTK::Vector
+    extractResidualForces(const SimTK::Vector& x) const = 0;
 };
 
 /**
@@ -66,23 +127,20 @@ class RealTime_API MuscleOptimization {
  *
  * TODO: include muscle physiology (e.g., f_m <= f(l, lDot))
  */
-class RealTime_API TorqueBasedTarget : public SimTK::OptimizerSystem {
+class RealTime_API TorqueBasedTargetLinearMuscle : public OptimizationTarget {
  public:
-    int p;
-    SimTK::ReferencePtr<OpenSim::Model> model;
-    SimTK::State state;
-    SimTK::Matrix R;
-    SimTK::Vector fMax, tau;
-    MomentArmFunctionT calcMomentArm;
-    int nma;
-    SimTK::Matrix W;
+    TorqueBasedTargetLinearMuscle() = default;
 
- public:
-    TorqueBasedTarget(OpenSim::Model* model, int objectiveExponent,
-                      const MomentArmFunctionT& momentArmFunction);
-    void prepareForOptimization(const MuscleOptimization::Input& input);
-    SimTK::Vector extractMuscleForces(const SimTK::Vector& x) const;
-    SimTK::Vector extractResidualForces(const SimTK::Vector& x) const;
+ private:
+    void
+    prepareForOptimization(const MuscleOptimization::Input& input) override;
+    SimTK::Vector
+    extractMuscleActivations(const SimTK::Vector& x) const override;
+    SimTK::Vector extractMuscleForces(const SimTK::Vector& x) const override;
+    SimTK::Vector extractResidualForces(const SimTK::Vector& x) const override;
+
+    // set upperBound equal to MaxIsometrixcForce
+    double setUpperBound(const OpenSim::Muscle* m) override;
 
  protected:
     int objectiveFunc(const SimTK::Vector& x, bool newCoefficients,
@@ -95,6 +153,43 @@ class RealTime_API TorqueBasedTarget : public SimTK::OptimizerSystem {
                            SimTK::Matrix& jac) const override;
 };
 
-} // namespace OpenSimRT
+/**
+ * @brief Muscle Optimization Criterion
+ *
+ * min Σ (|x^i| / |x^i_max|)^p, where x = [am; fRes]
+ * s.t. τ = R * (fmMax * (am*fmL*fmV + fmPE) * cosAlpha) + tauRes,
+ *      x_min^i <= x^i <= x_max^i
+ *
+ */
+class RealTime_API TorqueBasedTargetNonLinearMuscle
+        : public OptimizationTarget {
+ public:
+    TorqueBasedTargetNonLinearMuscle() = default;
 
-#endif
+ private:
+    void
+    prepareForOptimization(const MuscleOptimization::Input& input) override;
+    SimTK::Vector
+    extractMuscleActivations(const SimTK::Vector& x) const override;
+    SimTK::Vector extractMuscleForces(const SimTK::Vector& x) const override;
+    SimTK::Vector extractResidualForces(const SimTK::Vector& x) const override;
+
+    // set upper bound equal to maximum activation level (am_Max = 1.0)
+    double setUpperBound(const OpenSim::Muscle* m) override;
+
+ private:
+    // muscle-related values
+    SimTK::Vector fmL, fmV, fmPE, cosAlpha;
+
+ protected:
+    int objectiveFunc(const SimTK::Vector& x, bool newCoefficients,
+                      SimTK::Real& rP) const override;
+    int gradientFunc(const SimTK::Vector& x, bool newCoefficients,
+                     SimTK::Vector& gradient) const override;
+    int constraintFunc(const SimTK::Vector& x, bool newCoefficients,
+                       SimTK::Vector& constraints) const override;
+    int constraintJacobian(const SimTK::Vector& x, bool newCoefficients,
+                           SimTK::Matrix& jac) const override;
+};
+} // namespace OpenSimRT
+#endif // MUSCLE_OPTIMIZATION_H
