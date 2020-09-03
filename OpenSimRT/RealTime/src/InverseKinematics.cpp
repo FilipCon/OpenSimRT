@@ -6,6 +6,7 @@
 #include <OpenSim/Simulation/Model/BodySet.h>
 #include <OpenSim/Simulation/Model/MarkerSet.h>
 #include <OpenSim/Tools/IKCoordinateTask.h>
+#include <Simulation/Model/PhysicalFrame.h>
 
 using OpenSim::Model, OpenSim::MarkerData, OpenSim::Units, OpenSim::IKTaskSet,
         OpenSim::IKCoordinateTask, OpenSim::TimeSeriesTable;
@@ -88,7 +89,7 @@ InverseKinematics::Output InverseKinematics::solve(const Input& input) {
 TimeSeriesTable InverseKinematics::initializeLogger() {
     auto columnNames =
             OpenSimUtils::getCoordinateNamesInMultibodyTreeOrder(model);
-    
+
     TimeSeriesTable q;
     q.setColumnLabels(columnNames);
     return q;
@@ -171,7 +172,9 @@ void InverseKinematics::createIMUTasksFromMarkerData(
 void InverseKinematics::createIMUTasksFromObservationOrder(
         const Model& model, const vector<string>& observationOrder,
         vector<IMUTask>& imuTasks) {
-    for (auto body : observationOrder) {
+    for (auto observation : observationOrder) {
+        auto ix = observation.rfind("_imu");
+        auto body = (ix !=std::string::npos) ? observation.substr(0, ix) : observation;
         if (model.getBodySet().getIndex(body) >= 0) {
             imuTasks.push_back({body, body, Rotation(), 1.0});
         } else {

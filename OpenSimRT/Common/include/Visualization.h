@@ -95,6 +95,9 @@ class Common_API BasicModelVisualizer {
     SimTK::Visualizer* visualizer;
     SimTK::Visualizer::InputSilo* silo;
     bool shouldTerminate;
+
+    enum class MenuID { SIMULATION }; //// TODO: Add more Menus
+    enum class SimMenuItem { QUIT }; //// TODO: Add more functionalities
 };
 
 } // namespace OpenSimRT

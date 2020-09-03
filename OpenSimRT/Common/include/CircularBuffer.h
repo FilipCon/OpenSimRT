@@ -8,20 +8,20 @@
 #ifndef CIRCULAR_BUFFER_H
 #define CIRCULAR_BUFFER_H
 
-#include <vector>
+#include "Exception.h"
+
 #include <algorithm>
-#include <mutex>
 #include <condition_variable>
 #include <functional>
-#include "Exception.h"
+#include <mutex>
+#include <vector>
 
 namespace OpenSimRT {
 
 /**
  * \brief A thread safe circular buffer.
  */
-template<int history, typename T>
-class CircularBuffer {
+template <int history, typename T> class CircularBuffer {
  public:
     CircularBuffer() {
         current = 0;
@@ -50,6 +50,7 @@ class CircularBuffer {
                 current = 0;
                 startOver = true;
             }
+            newValue = true;
         }
         // notify after unlocking
         bufferNotEmpty.notify_one();
@@ -62,26 +63,25 @@ class CircularBuffer {
         // lock
         std::unique_lock<std::mutex> lock(monitor);
         // check if data are available to proceed
-        bufferNotEmpty.wait(lock, [this, &M](){return this->notEmpty(M);});
+        bufferNotEmpty.wait(lock, [&]() { return (notEmpty(M) && newValue == true); });
+        newValue = false;
         // if not empty get data
         std::vector<T> result;
         result.resize(M);
         int index = current - 1;
         for (int i = 0; i < M; ++i) { // order of execution matters
-            if (index < 0) {
-                index = history - 1;
-            }
+            if (index < 0) { index = history - 1; }
             result[i] = buffer[index];
             index--;
         }
-        if (reverseOrder) {
-            std::reverse(result.begin(), result.end());
-        }
+        if (reverseOrder) { std::reverse(result.begin(), result.end()); }
         return result;
     }
+
  private:
     int current;
     bool startOver;
+    bool newValue; // Don't allow "get" twice
     std::vector<T> buffer;
     std::mutex monitor;
     std::condition_variable bufferNotEmpty;

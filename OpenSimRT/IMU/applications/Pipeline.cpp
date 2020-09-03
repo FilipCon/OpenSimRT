@@ -5,11 +5,11 @@
 #include "Settings.h"
 #include "Simulation.h"
 #include "Visualization.h"
-#include "ip/UdpSocket.h"
-#include "osc/OscPacketListener.h"
-#include "osc/OscReceivedElements.h"
 
+#include <OpenSim/Common/STOFileAdapter.h>
+#include <exception>
 #include <iostream>
+#include <simbody/internal/Visualizer.h>
 #include <thread>
 
 using namespace std;
@@ -19,7 +19,8 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    auto section = "TEST_NGIMU_UPPER_LIMB";
+    // auto section = "LOWER_BODY_NGIMU";
+    auto section = "UPPER_LIMB_NGIMU";
     auto IMU_IP = ini.getVector(section, "IMU_IP", vector<string>());
     auto LISTEN_IP = ini.getString(section, "LISTEN_IP", "0.0.0.0");
     auto SEND_PORTS = ini.getVector(section, "SEND_PORTS", vector<int>());
@@ -30,18 +31,15 @@ void run() {
 
     // setup model
     Model model(modelFile);
-    OpenSimUtils::removeActuators(model);
     vector<InverseKinematics::IMUTask> imuTasks;
-    vector<string> observationOrder{IMU_BODIES[0], IMU_BODIES[1]};
+    vector<string> observationOrder(IMU_BODIES);
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, observationOrder, imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, vector<InverseKinematics::MarkerTask>{},
                          imuTasks, SimTK::Infinity, 1e-5);
-
-    // visualizer
-    BasicModelVisualizer visualizer(model);
+    auto qLogger = ik.initializeLogger();
 
     // manager
     NGIMUManager manager;
@@ -49,25 +47,49 @@ void run() {
                            LISTEN_PORTS);
     manager.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
 
-    std::this_thread::sleep_for(2s);
-
+    // calibrator
     IMUCalibrator clb = IMUCalibrator(model, &manager, observationOrder);
+    PositionTracker pt = PositionTracker(model, observationOrder);
 
     // start listening
     thread listen(&NGIMUManager::startListeners, &manager);
-    clb.run(3.0);
-    // main loop
-    while (true) {
-        // get input
-        auto input = manager.getObservations();
 
-        // solve ik
-        auto pose = ik.solve(clb.transform(input));
+    clb.run(3.0); // record for 3 seconds
 
-        // visualize
-        visualizer.update(pose.q);
+    // visualizer
+    BasicModelVisualizer visualizer(model);
+    auto accVectorDecorator = new ForceDecorator(Red, 1, 3);
+    visualizer.addDecorationGenerator(accVectorDecorator);
+
+    try { // main loop
+        while (true) {
+            // get input from imus
+            auto imuDataFrame = manager.getObservations();
+
+            auto acc = pt.computeVelocity(imuDataFrame);
+
+            // solve ik
+            auto pose = ik.solve(clb.transform(imuDataFrame));
+
+            // visualize
+            visualizer.update(pose.q);
+            // Vec3 pelvisJoint;
+            // visualizer.expressPositionInGround("pelvis", Vec3(0),
+            //                                    pelvisJoint);
+            // accVectorDecorator->update(pelvisJoint, acc);
+
+            // record
+            qLogger.appendRow(pose.t, ~pose.q);
+        }
+    } catch (std::exception& e) {
+        cout << e.what() << endl;
+        manager.stopListeners();
+        listen.join();
+
+        // store results
+        STOFileAdapter::write(
+                qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
     }
-    listen.join();
 }
 
 int main(int argc, char* argv[]) {

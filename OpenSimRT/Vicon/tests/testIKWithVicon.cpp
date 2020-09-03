@@ -39,12 +39,12 @@ void run() {
 
     // prepare marker tasks
     Model model(modelFile);
-    vector<InverseKinematics::MarkerTask> markerTasks;
+    vector<OpenSimRT::InverseKinematics::MarkerTask> markerTasks;
     vector<string> observationOrder;
     createMarkerTasksFromMarkerNames(model, vicon.markerNames,
 				     markerTasks, observationOrder);
-    InverseKinematics ik(modelFile, 100, markerTasks,
-                         vector<InverseKinematics::IMUTask>{});
+    OpenSimRT::InverseKinematics ik(modelFile, 100, markerTasks,
+                                    vector<InverseKinematics::IMUTask>{});
 
     // visualizer
     BasicModelVisualizer visualizer(modelFile);

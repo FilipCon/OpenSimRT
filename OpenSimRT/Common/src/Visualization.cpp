@@ -1,8 +1,10 @@
 #include "Visualization.h"
 
+#include "Exception.h"
 #include "Utils.h"
 
 #include <OpenSim/Simulation/Model/Muscle.h>
+#include <cmath>
 
 using namespace std;
 using namespace chrono;
@@ -68,11 +70,20 @@ BasicModelVisualizer::BasicModelVisualizer(const OpenSim::Model& otherModel)
 #ifndef CONTINUOUS_INTEGRATION
     visualizer = &model.updVisualizer().updSimbodyVisualizer();
     silo = &model.updVisualizer().updInputSilo();
+
+    // visualizer settings
     visualizer->setShowFrameRate(false);
     visualizer->setShutdownWhenDestructed(true);
     visualizer->setMode(Visualizer::Mode::Sampling);
     visualizer->setDesiredBufferLengthInSec(5);
     visualizer->setDesiredFrameRate(60);
+
+    // add menu to visualizer //// TODO: add more if required
+    Array_<std::pair<String, int> > runMenuItems;
+    runMenuItems.push_back(std::make_pair("Quit", int(SimMenuItem::QUIT)));
+    visualizer->addMenu("Simulation", int(MenuID::SIMULATION), runMenuItems);
+
+    // add fps decorator
     fps = new FPSDecorator();
     visualizer->addDecorationGenerator(fps);
 #endif
@@ -104,6 +115,15 @@ void BasicModelVisualizer::update(const Vector& q,
         if (key == Visualizer::InputListener::KeyEsc) {
             shouldTerminate = true;
         }
+    }
+
+    // terminate simulation when menu option is selected
+    int menuId, item;
+    silo->takeMenuPick(menuId, item);
+    if (menuId == int(MenuID::SIMULATION) && item == int(SimMenuItem::QUIT))
+    {
+        visualizer->shutdown();
+        THROW_EXCEPTION("End Simulation. Bye!");
     }
 #endif
 }

@@ -14,14 +14,16 @@ namespace OpenSimRT {
  * @brief Interface class for IMU implementations.
  *
  */
-class IMU_API ListenerAdapter {
+template <typename T> class ListenerAdapter {
  public:
-    Manager* manager; // pointer to base class manager
+    Manager<T>* manager; // pointer to base class manager
     int port;
     std::string ip;
 
     // push data to base class manager buffer
-    void pushDataToManagerBuffer(const int& id, const IMUData&);
+    void pushDataToManagerBuffer(const int& port, const T& input) {
+        manager->buffer[port]->add(input);
+    }
 
  protected:
     virtual ~ListenerAdapter(){};
@@ -32,15 +34,20 @@ class IMU_API ListenerAdapter {
  *
  */
 class IMU_API NGIMUListener : public osc::OscPacketListener,
-                              public ListenerAdapter {
+                              public ListenerAdapter<IMUData> {
  public:
-    osc::TimeTag timeTag; // TODO time is measured from 1970
+    osc::uint64 timeTag; // TODO time is measured from 1970
+
+    //// TODO: add more pointers to imu data if required
+    IMUData::Quaternion* quaternion = nullptr;
+    IMUData::Sensors* sensors = nullptr;
 
  protected:
     void ProcessBundle(const osc::ReceivedBundle&,
                        const IpEndpointName&) override;
     void ProcessMessage(const osc::ReceivedMessage& m,
                         const IpEndpointName& remoteEndpoint) override;
+
 };
 
 } // namespace OpenSimRT

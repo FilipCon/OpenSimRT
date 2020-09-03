@@ -1,11 +1,13 @@
 #include "Manager.h"
 
+#include "CircularBuffer.h"
 #include "IMUListener.h"
 #include "InverseKinematics.h"
 #include "osc/OscOutboundPacketStream.h"
 #include "osc/OscReceivedElements.h"
 #include "osc/OscTypes.h"
 
+#include <algorithm>
 #include <iterator>
 #include <tuple>
 #include <type_traits>
@@ -26,7 +28,8 @@ std::ostream& operator<<(std::ostream& os, const IMUData::Quaternion& q) {
 }
 
 /**
- * @brief Type-agnostic variadic template function for sending messages to remote IP.
+ * @brief Type-agnostic variadic template function for sending messages to
+ * remote IP.
  */
 template <typename... Args>
 void sendMessage(UdpTransmitSocket& socket, const std::string& command,
@@ -49,11 +52,11 @@ void sendMessage(UdpTransmitSocket& socket, const std::string& command,
 }
 
 /*******************************************************************************/
-NGIMUManager::NGIMUManager() { m_Manager = this; }
 
 NGIMUManager::NGIMUManager(const std::vector<std::string>& ips,
                            const std::vector<int>& ports)
         : NGIMUManager() {
+    initFrameTime = 0;
     setupListeners(ips, ports);
 }
 
@@ -69,7 +72,7 @@ void NGIMUManager::setupListeners(const std::vector<std::string>& ips,
         listeners[i]->manager = this;
 
         // initialize manager buffer
-        buffer[ports[i]] = new DoubleBuffer<IMUData>();
+        buffer[ports[i]] = new CircularBuffer<CIRCULAR_BUFFER_SIZE, IMUData>();
     }
 }
 
@@ -85,11 +88,13 @@ void NGIMUManager::setupTransmitters(const std::vector<std::string>& remoteIPs,
         // send commands to imu
         sendMessage(socket, "/wifi/send/ip", localIP.c_str());
         sendMessage(socket, "/wifi/send/port", localPorts[i]);
+        sendMessage(socket, "/rate/sensors", 60);
+        sendMessage(socket, "/rate/quaternion", 60);
         sendMessage(socket, "/identify"); // bling!
     }
 }
 
-void NGIMUManager::startListenersImp() {
+void NGIMUManager::startListeners() {
     for (int i = 0; i < listeners.size(); ++i) {
         // get IP and port info from listener
         const auto& ip = listeners[i]->ip;
@@ -105,20 +110,21 @@ void NGIMUManager::startListenersImp() {
     mux.RunUntilSigInt();
 }
 
-InverseKinematics::Input NGIMUManager::getObservationsImp() {
-    InverseKinematics::Input input;
-    for (auto& mapElement : buffer) {
-        // thread-safe fetch data from buffer
-        auto imuData = mapElement.second->get();
+void NGIMUManager::stopListeners() { mux.Break(); }
 
-        // set aliases
-        const auto& t = imuData.t;
-        const auto& q = imuData.quaternion;
+pair<double, vector<IMUData>> NGIMUManager::getObservations() {
+    vector<IMUData> results;
+    double time;
+    for (const auto& listener : listeners) {
+        results.push_back(buffer[listener->port]->get(CIRCULAR_BUFFER_SIZE)[0]);
 
-        // transform from NGIMU earth frame to OpenSim reference system
-        input.imuObservations.push_back(
-                SimTK::Rotation(SimTK::Quaternion(-q.q1, q.q2, q.q4, -q.q3)) *
-                SimTK::Rotation(-SimTK::Pi / 2, SimTK::CoordinateAxis(0)));
+        const auto& timeStamp = results.back().quaternion.timeStamp;
+        unsigned last32bitsValue = timeStamp & 0xFFFFFFFF;
+        unsigned first32bitsValue = (timeStamp >> 32) & 0xFFFFFFFF;
+
+        time = first32bitsValue + last32bitsValue * pow(2.0, -32) -
+               initFrameTime;
+        if (initFrameTime == 0) initFrameTime = time;
     }
-    return input;
+    return make_pair(time, results);
 }
