@@ -7,7 +7,6 @@
 #include "ip/UdpSocket.h"
 #include "osc/OscTypes.h"
 
-#include <bits/stdint-uintn.h>
 #include <iostream>
 #include <map>
 #include <string>
