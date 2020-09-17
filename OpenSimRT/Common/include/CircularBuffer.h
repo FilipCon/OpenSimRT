@@ -15,7 +15,7 @@
 #include <functional>
 #include <mutex>
 #include <vector>
-
+#include <iostream>
 namespace OpenSimRT {
 
 /**
@@ -63,7 +63,7 @@ template <int history, typename T> class CircularBuffer {
         // lock
         std::unique_lock<std::mutex> lock(monitor);
         // check if data are available to proceed
-        bufferNotEmpty.wait(lock, [&]() { return (notEmpty(M) && newValue == true); });
+        bufferNotEmpty.wait(lock, [&]() { return notEmpty(M) && newValue == true; });
         newValue = false;
         // if not empty get data
         std::vector<T> result;

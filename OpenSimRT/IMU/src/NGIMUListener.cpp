@@ -1,21 +1,9 @@
-#include "IMUListener.h"
+#include "NGIMUListener.h"
+#include "Exception.h"
 
-#include "Manager.h"
-#include "osc/OscOutboundPacketStream.h"
-#include "osc/OscReceivedElements.h"
-#include "osc/OscTypes.h"
-
-#include <chrono>
-#include <sys/types.h>
-
-using namespace OpenSimRT;
-using namespace osc;
 using namespace std;
-
-// void ListenerAdapter::pushDataToManagerBuffer(const int& port,
-//                                               const IMUData& input) {
-//     manager->buffer[port]->add(input);
-// }
+using namespace osc;
+using namespace OpenSimRT;
 
 void NGIMUListener::ProcessBundle(const ReceivedBundle& b,
                                   const IpEndpointName& remoteEndpoint) {
@@ -39,7 +27,7 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
             ReceivedMessageArgumentStream args = m.ArgumentStream();
             float q1, q2, q3, q4;
             args >> q1 >> q2 >> q3 >> q4 >> osc::EndMessage;
-            quaternion = new IMUData::Quaternion{q1, q2, q3, q4, timeTag};
+            quaternion = new NGIMUData::Quaternion{q1, q2, q3, q4, timeTag};
         }
 
         // get /sensors
@@ -51,11 +39,11 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
             float barometer;
             args >> gX >> gY >> gZ >> aX >> aY >> aZ >> mX >> mY >> mZ >>
                     barometer >> osc::EndMessage;
-            sensors = new IMUData::Sensors();
-            sensors->acceleration = IMUData::Sensors::Acceleration{aX, aY, aZ};
-            sensors->gyroscope = IMUData::Sensors::Gyroscope{gX, gY, gZ};
-            sensors->magnetometer = IMUData::Sensors::Magnetometer{mX, mY, mZ};
-            sensors->barometer = IMUData::Sensors::Barometer{barometer};
+            sensors = new NGIMUData::Sensors();
+            sensors->acceleration = NGIMUData::Sensors::Acceleration{aX, aY, aZ};
+            sensors->gyroscope = NGIMUData::Sensors::Gyroscope{gX, gY, gZ};
+            sensors->magnetometer = NGIMUData::Sensors::Magnetometer{mX, mY, mZ};
+            sensors->barometer = NGIMUData::Sensors::Barometer{barometer};
             sensors->timeStamp = timeTag;
         }
 
@@ -65,7 +53,7 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
 
         // when all messages are processed, push IMU bundle to buffer
         if (quaternion && sensors) {
-            auto data = new IMUData();
+            auto data = new NGIMUData();
             data->quaternion = *quaternion;
             data->sensors = *sensors;
 

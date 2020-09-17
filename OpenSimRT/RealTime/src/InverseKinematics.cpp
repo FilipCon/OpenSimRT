@@ -72,6 +72,7 @@ InverseKinematics::InverseKinematics(const OpenSim::Model& otherModel,
 }
 
 InverseKinematics::Output InverseKinematics::solve(const Input& input) {
+    PROFILE_FUNCTION();
     state.updTime() = input.t;
     markerAssemblyConditions->moveAllObservations(input.markerObservations);
     imuAssemblyConditions->moveAllObservations(input.imuObservations);

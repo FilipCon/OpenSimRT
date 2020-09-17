@@ -11,6 +11,8 @@
 #include "internal/CommonExports.h"
 
 #include <SimTKcommon.h>
+#include <SimTKcommon/internal/BigMatrix.h>
+#include <SimTKcommon/internal/ReferencePtr.h>
 #include <condition_variable>
 #include <mutex>
 namespace OpenSimRT {
@@ -187,6 +189,39 @@ class Common_API IIRFilter {
 };
 
 /**
+ * Digital Butterworth filter
+ */
+class Common_API ButterworthFilter {
+ public:
+    enum class FilterType { LowPass, HighPass, BandPass, BandCut };
+    ButterworthFilter(int filtOrder, double cutOffFreq, const FilterType& type,
+                      const IIRFilter::InitialValuePolicy& policy);
+    void setupFilter(int filtOrder, double cutOffFreq, const FilterType& type,
+                     const IIRFilter::InitialValuePolicy& policy);
+    SimTK::Vector filter(const SimTK::Vector& xn);
+
+ private:
+    // lp
+    SimTK::Vector ccof_bwlp(const int& n);
+    SimTK::Vector dcof_bwlp(const int& n, const double& fcf);
+    double sf_bwlp(const int& n, const double& fcf);
+
+    // hp
+    SimTK::Vector ccof_bwhp(const int& n);
+    SimTK::Vector dcof_bwhp(const int& n, const double& fcf);
+    double sf_bwhp(const int& n, const double& fcf);
+
+    // bp
+    // ... TODO
+
+    // bc
+    //... TODO
+
+    // pointer to iirFilter
+    SimTK::ReferencePtr<IIRFilter> iir;
+};
+
+/**
  * \brief A multidimensional FIR filter.
  *
  *     y[n] = b[0]*x[n] + b[1]*x[n-1] + ... + b[M]*x[n-M]
@@ -223,6 +258,20 @@ class Common_API NumericalDifferentiator : public FIRFilter {
  public:
     NumericalDifferentiator(int n, int m);
     SimTK::Vector diff(double tn, const SimTK::Vector& xn);
+};
+
+/**
+ * @brief Multidimensional numerical numerical integrator
+ */
+class Common_API NumericalIntegrator {
+    double t0;
+    SimTK::Vector x0;
+
+ public:
+    NumericalIntegrator(const int& n);
+    NumericalIntegrator(const int& n, const SimTK::Vector& initValue,
+                        const double& initTime);
+    SimTK::Vector integrate(const SimTK::Vector& xn, const double& t);
 };
 
 } // namespace OpenSimRT

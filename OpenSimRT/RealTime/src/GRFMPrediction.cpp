@@ -43,10 +43,10 @@ GRFMPrediction::GRFMPrediction(const Model& otherModel,
     heelStationL->setName("heel_station_point_l");
     toeStationR->setName("toe_station_point_r");
     toeStationL->setName("toe_station_point_l");
-    model.addModelComponent(heelStationR);
-    model.addModelComponent(heelStationL);
-    model.addModelComponent(toeStationR);
-    model.addModelComponent(toeStationL);
+    model.addModelComponent(heelStationR.get());
+    model.addModelComponent(heelStationL.get());
+    model.addModelComponent(toeStationR.get());
+    model.addModelComponent(toeStationL.get());
 
     // initialize system
     state = model.initSystem();

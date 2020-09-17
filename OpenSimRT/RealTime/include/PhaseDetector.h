@@ -1,6 +1,4 @@
-#ifndef PHASE_DETECTOR_H
-#define PHASE_DETECTOR_H
-
+#pragma once
 #include "GRFMPrediction.h"
 #include "internal/RealTimeExports.h"
 
@@ -68,4 +66,3 @@ class RealTime_API ContactForceBasedPhaseDetector : GaitPhaseDetector {
     SimTK::ReferencePtr<OpenSim::HuntCrossleyForce> leftContactForce;
 };
 } // namespace OpenSimRT
-#endif PHASE_DETECTOR_H

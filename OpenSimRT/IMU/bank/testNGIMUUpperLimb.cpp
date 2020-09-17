@@ -45,9 +45,9 @@ void run() {
 
     // manager
     NGIMUManager manager;
-    manager.setupListeners(vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
+    manager.setupInput(vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
                            LISTEN_PORTS);
-    manager.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
+    manager.setupDevice(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
 
     std::this_thread::sleep_for(2s);
 
@@ -59,13 +59,13 @@ void run() {
     // main loop
     while (true) {
         // get input
-        auto input = manager.getObservations();
+        auto input = manager.getFrame();
 
-        // solve ik
-        auto pose = ik.solve(clb.transform(input));
+        // // solve ik
+        // auto pose = ik.solve(clb.transform(input));
 
-        // visualize
-        visualizer.update(pose.q);
+        // // visualize
+        // visualizer.update(pose.q);
     }
     listen.join();
 }

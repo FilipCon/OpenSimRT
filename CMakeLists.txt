@@ -64,7 +64,7 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU OR
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -stdlib=libc++")
     endif()
   else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -g -Wno-deprecated -w")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -g")
     # -fno-var-tracking-assignments
   endif()
 endif()

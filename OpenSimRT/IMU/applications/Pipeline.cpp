@@ -1,12 +1,18 @@
 #include "IMUCalibrator.h"
 #include "INIReader.h"
-#include "Manager.h"
+#include "InverseKinematics.h"
+#include "NGIMUInputDriver.h"
 #include "OpenSimUtils.h"
 #include "Settings.h"
 #include "Simulation.h"
 #include "Visualization.h"
 
+#include <Common/TimeSeriesTable.h>
+#include <OpenSim/Common/CSVFileAdapter.h>
 #include <OpenSim/Common/STOFileAdapter.h>
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/State.h>
+#include <Simulation/Model/Model.h>
 #include <exception>
 #include <iostream>
 #include <simbody/internal/Visualizer.h>
@@ -19,8 +25,8 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    // auto section = "LOWER_BODY_NGIMU";
-    auto section = "UPPER_LIMB_NGIMU";
+    auto section = "LOWER_BODY_NGIMU";
+    // auto section = "UPPER_LIMB_NGIMU";
     auto IMU_IP = ini.getVector(section, "IMU_IP", vector<string>());
     auto LISTEN_IP = ini.getString(section, "LISTEN_IP", "0.0.0.0");
     auto SEND_PORTS = ini.getVector(section, "SEND_PORTS", vector<int>());
@@ -29,66 +35,108 @@ void run() {
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
+    // prepare benchmark session
+    Instrumentor::Get().BeginSession("IMU Pipeline",
+                                     subjectDir + "real_time/benchmark.json");
+
     // setup model
     Model model(modelFile);
+
+    // add marker to pelvis center to track model position from imus
+    auto pelvisMarker =
+            Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
+    model.addMarker(&pelvisMarker);
+    model.finalizeConnections();
+
+    State state = model.initSystem();
+    model.realizePosition(state);
+    auto height = model.getBodySet().get("pelvis").findStationLocationInGround(
+            state, Vec3(0));
+
+    // marker tasks
+    vector<InverseKinematics::MarkerTask> markerTasks;
+    vector<string> markerObservationOrder;
+    InverseKinematics::createMarkerTasksFromMarkerNames(
+            model, vector<string>{"PelvisCenter"}, markerTasks,
+            markerObservationOrder);
+
+    // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
-    vector<string> observationOrder(IMU_BODIES);
+    vector<string> imuObservationOrder(IMU_BODIES);
     InverseKinematics::createIMUTasksFromObservationOrder(
-            model, observationOrder, imuTasks);
+            model, imuObservationOrder, imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
-    InverseKinematics ik(model, vector<InverseKinematics::MarkerTask>{},
-                         imuTasks, SimTK::Infinity, 1e-5);
+    InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
 
     // manager
-    NGIMUManager manager;
-    manager.setupListeners(vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
+    NGIMUInputDriver driver;
+    driver.setupInput(imuObservationOrder,
+                           vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
                            LISTEN_PORTS);
-    manager.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
+    driver.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
+    auto imuLogger = driver.initializeLogger();
 
     // calibrator
-    IMUCalibrator clb = IMUCalibrator(model, &manager, observationOrder);
-    PositionTracker pt = PositionTracker(model, observationOrder);
+    IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
+    PositionTracker pt = PositionTracker(model, imuObservationOrder);
 
     // start listening
-    thread listen(&NGIMUManager::startListeners, &manager);
+    thread listen(&NGIMUInputDriver::startListening, &driver);
 
     clb.run(3.0); // record for 3 seconds
 
     // visualizer
     BasicModelVisualizer visualizer(model);
-    auto accVectorDecorator = new ForceDecorator(Red, 1, 3);
-    visualizer.addDecorationGenerator(accVectorDecorator);
+    // auto vectorDecorator = new ForceDecorator(Green, 1, 3);
+    // visualizer.addDecorationGenerator(vectorDecorator);
+
+    TimeSeriesTable avp;
+    vector<string> columnNames{"px", "py", "pz"};
+    avp.setColumnLabels(columnNames);
 
     try { // main loop
         while (true) {
             // get input from imus
-            auto imuDataFrame = manager.getObservations();
+            auto imuDataFrame = driver.getFrame();
 
-            auto acc = pt.computeVelocity(imuDataFrame);
+            // estimate position from IMUs
+            auto pos = pt.computePosition(imuDataFrame) + height;
+
+            // Vec3 pos = Vec3(0,0,0) + height;
 
             // solve ik
-            auto pose = ik.solve(clb.transform(imuDataFrame));
+            auto pose = ik.solve(
+                    clb.transform(imuDataFrame, vector<SimTK::Vec3>{pos}));
 
             // visualize
             visualizer.update(pose.q);
             // Vec3 pelvisJoint;
-            // visualizer.expressPositionInGround("pelvis", Vec3(0),
-            //                                    pelvisJoint);
-            // accVectorDecorator->update(pelvisJoint, acc);
+            // visualizer.expressPositionInGround("pelvis", Vec3(0), pelvisJoint);
+            // vectorDecorator->update(pelvisJoint, vel);
 
             // record
+            imuLogger.appendRow(pose.t, ~driver.asVector(imuDataFrame));
             qLogger.appendRow(pose.t, ~pose.q);
+            avp.appendRow(pose.t, ~Vector(pos));
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;
-        manager.stopListeners();
+        driver.stopListening();
         listen.join();
+
+        Instrumentor::Get().EndSession();
 
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
+        STOFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.sto");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
+        CSVFileAdapter::write(avp,
+                              subjectDir + "experimental_data/estimates.csv");
     }
 }
 

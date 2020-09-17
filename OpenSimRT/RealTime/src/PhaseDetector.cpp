@@ -126,8 +126,8 @@ void ContactForceBasedPhaseDetector::updDetector(
     updateState(input, model, state, Stage::Dynamics);
 
     // update leg phase
-    auto phaseR = updLegPhase(rightContactForce);
-    auto phaseL = updLegPhase(leftContactForce);
+    auto phaseR = updLegPhase(rightContactForce.get());
+    auto phaseL = updLegPhase(leftContactForce.get());
 
     // push to sliding window
     phaseWindowR.insert(phaseR);
