@@ -110,7 +110,6 @@ void NGIMUInputDriver::startListening() {
 void NGIMUInputDriver::stopListening() { mux.Break(); }
 
 NGIMUInputDriver::IMUDataFrame NGIMUInputDriver::getFrame() {
-    PROFILE_FUNCTION();
     vector<NGIMUData> results;
     double time;
     for (const auto& listener : listeners) {

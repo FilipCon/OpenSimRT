@@ -58,7 +58,6 @@ IMUCalibrator::IMUCalibrator(const Model& model, NGIMUInputDriver* const driver,
 InverseKinematics::Input
 IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
                          const vector<Vec3>& markerData) {
-    PROFILE_FUNCTION();
     InverseKinematics::Input input;
 
     // time

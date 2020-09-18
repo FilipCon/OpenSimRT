@@ -27,6 +27,9 @@ option(USE_UNITY_BUILD "Enable to speed up the building" OFF)
 # build Vicon interface
 option(BUILD_VICON "Build Vicon streamer interface" OFF)
 
+# build Moticon interface
+option(BUILD_MOTICON "Build Moticon streamer interface" ON)
+
 # build Vicon interface
 option(BUILD_NGIMU "Build NGIMU streamer interface" ON)
 
@@ -67,6 +70,10 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU OR
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -g")
     # -fno-var-tracking-assignments
   endif()
+endif()
+
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
 endif()
 
 # define library postfix so that different builds will produce

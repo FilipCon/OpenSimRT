@@ -35,10 +35,6 @@ void run() {
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
-    // prepare benchmark session
-    Instrumentor::Get().BeginSession("IMU Pipeline",
-                                     subjectDir + "real_time/benchmark.json");
-
     // setup model
     Model model(modelFile);
 
@@ -125,8 +121,6 @@ void run() {
         cout << e.what() << endl;
         driver.stopListening();
         listen.join();
-
-        Instrumentor::Get().EndSession();
 
         // store results
         STOFileAdapter::write(

@@ -107,7 +107,6 @@ void RealTimeAnalysis::run() {
 }
 
 void RealTimeAnalysis::acquisition() {
-    PROFILE_FUNCTION();
     try {
         // // use first valid frame as initial condition.
         // markerReconstruction->init(parameters.dataAcquisitionFunction);
@@ -150,7 +149,6 @@ void RealTimeAnalysis::acquisition() {
 }
 
 void RealTimeAnalysis::processing() {
-    PROFILE_FUNCTION();
     try {
         FilteredData filteredData;
         Vector_<SpatialVec> reactionWrenches;
@@ -236,7 +234,6 @@ void RealTimeAnalysis::processing() {
 }
 
 RealTimeAnalysis::Output& RealTimeAnalysis::getResults() {
-    PROFILE_FUNCTION();
     unique_lock<mutex> locker(_mu);
     _cond.wait(locker, [&]() { return _notifyParentThread; });
     _notifyParentThread = false;

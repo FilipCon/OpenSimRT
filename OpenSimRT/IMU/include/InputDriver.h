@@ -54,7 +54,7 @@ class IMU_API Driver {
     virtual OpenSim::TimeSeriesTable initializeLogger() = 0;
 
  protected:
-    InputDriver() noexcept = default;
+    InputDriver() noexcept {};
     InputDriver& operator=(const InputDriver&) = delete;
     InputDriver(const InputDriver&) = delete;
     virtual ~InputDriver() = default;

@@ -77,7 +77,7 @@ class RealTime_API GRFMPrediction {
         SimTK::Vector qDDot;
     };
 
-    struct Output {
+    struct RealTime_API Output {
         double t;
         SimTK::Vec3 point;
         SimTK::Vec3 force;

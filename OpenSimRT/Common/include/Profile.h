@@ -9,7 +9,12 @@
 #else
 #define PROFILE_SCOPE(name)
 #endif
+
+#ifdef WIN32
+#define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCSIG__)
+# else
 #define PROFILE_FUNCTION() PROFILE_SCOPE(__PRETTY_FUNCTION__)
+#endif
 
 struct ProfileResult {
     std::string Name;

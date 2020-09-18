@@ -119,7 +119,6 @@ void run(char const* name) {
 
     // acquisition function (simulates acquisition from motion)
     auto dataAcquisitionFunction = [&]() -> MotionCaptureInput {
-        PROFILE_FUNCTION();
         static int i = 0;
         MotionCaptureInput input;
 
@@ -167,11 +166,6 @@ void run(char const* name) {
             vector<string>{"tibia_r", "talus_l"};
     RealTimeAnalysis pipeline(model, pipelineParameters);
 
-    // prepare benchmark session
-    Instrumentor::Get().BeginSession(
-            "Unity Interface",
-            subjectDir + "real_time/pipeline/benchmark.json");
-
     // run pipeline
     thread acquisitionThread(&RealTimeAnalysis::acquisition, &pipeline);
     thread processingThread(&RealTimeAnalysis::processing, &pipeline);
@@ -193,7 +187,6 @@ void run(char const* name) {
         cout << "Writing results in file..." << endl;
         // pipeline.exportResults(subjectDir + "real_time/pipeline");
 
-        Instrumentor::Get().EndSession();
         throw(e);
     }
 }
