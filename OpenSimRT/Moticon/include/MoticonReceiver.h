@@ -1,16 +1,18 @@
-#include <SimTKcommon.h>
-
 #pragma once
-#include "Network.h"
 #include "internal/MoticonExports.h"
+#include "ip/IpEndpointName.h"
+#include "ip/UdpSocket.h"
 
+#include <Common/TimeSeriesTable.h>
+#include <SimTKcommon.h>
+#include <SimTKcommon/internal/BigMatrix.h>
 #include <ostream>
 #include <string>
 #include <vector>
 
 class Moticon_API MoticonReceiver {
  public:
-    struct MoticonReceivedBundle {
+    struct Moticon_API MoticonReceivedBundle {
         double timestamp;
         struct Measurement {
             SimTK::Vec3 acceleration;
@@ -19,13 +21,18 @@ class Moticon_API MoticonReceiver {
             SimTK::Vec<16> pressure; // 16 sensors
             double totalForce;
         } left, right;
+        SimTK::Vector asVector() const;
     };
 
-    MoticonReceiver();
+    MoticonReceiver(const std::string& ip, const int& port);
+    ~MoticonReceiver();
+    void setup(const std::string& ip, const int& port);
     MoticonReceivedBundle receiveData();
+    OpenSim::TimeSeriesTable initializeLogger();
 
  private:
-    UDPSocket socket;
+    UdpReceiveSocket* socket;
+    IpEndpointName *endPoint;
     std::string getStream();
     std::vector<double> splitInputStream(std::string, std::string);
 };

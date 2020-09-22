@@ -15,6 +15,7 @@ class IMU_API NGIMUInputDriver : public InputDriver<NGIMUData> {
     NGIMUInputDriver() = default;
     NGIMUInputDriver(const std::vector<std::string>& names,
                      const std::vector<std::string>&, const std::vector<int>&);
+    ~NGIMUInputDriver();
 
     // setup listening sockets
     virtual void setupInput(const std::vector<std::string>& imuLabels,

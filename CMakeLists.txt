@@ -18,8 +18,10 @@ if(UNIX AND NOT CMAKE_BUILD_TYPE)
 endif()
 
 # build documentation
-option(BUILD_DOCUMENTATION
-  "Create and install the HTML based API documentation (requires Doxygen)" OFF)
+option(
+  BUILD_DOCUMENTATION
+  "Create and install the HTML based API documentation (requires Doxygen)" OFF
+)
 
 # enables speedup in build
 option(USE_UNITY_BUILD "Enable to speed up the building" OFF)
@@ -48,15 +50,17 @@ endif()
 # run benchmarks
 option(RUN_BENCHMARKS "Run Benchmarks" ON)
 if(RUN_BENCHMARKS)
-    add_definitions(-DPROFILING)
+  add_definitions(-DPROFILING)
 endif()
 
 # group targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # c++11, -g option is used to export debug symbols for gdb
-if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU OR
-   ${CMAKE_CXX_COMPILER_ID} MATCHES Clang)
+if(
+  ${CMAKE_CXX_COMPILER_ID} MATCHES GNU OR
+  ${CMAKE_CXX_COMPILER_ID} MATCHES Clang
+)
   # Using C++11 on OSX requires using libc++ instead of libstd++.
   # libc++ is an implementation of the C++ standard library for OSX.
   if(APPLE)
@@ -73,7 +77,7 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU OR
 endif()
 
 if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
 endif()
 
 # define library postfix so that different builds will produce
@@ -116,32 +120,42 @@ set(CMAKE_INSTALL_DATADIR ${CMAKE_INSTALL_PREFIX}/data)
 include(CMakePackageConfigHelpers)
 
 # configuration
-set(TARGET_EXPORT_NAME "${PROJECT_NAME}-targets" CACHE
-  INTERNAL "Internal variable that is referenced by library generation")
+set(
+  TARGET_EXPORT_NAME "${PROJECT_NAME}-targets" CACHE
+  INTERNAL "Internal variable that is referenced by library generation"
+)
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(VERSION_CONFIG "${GENERATED_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
 set(PROJECT_CONFIG "${GENERATED_DIR}/${PROJECT_NAME}Config.cmake")
 
 # Configure '<PROJECT-NAME>ConfigVersion.cmake'
 # Note: PROJECT_VERSION is used as a VERSION
-write_basic_package_version_file("${VERSION_CONFIG}"
-  COMPATIBILITY SameMajorVersion)
+write_basic_package_version_file(
+  "${VERSION_CONFIG}"
+  COMPATIBILITY SameMajorVersion
+)
 
 # Configure '<PROJECT-NAME>Config.cmake'
-configure_package_config_file("cmake/Config.cmake.in"
+configure_package_config_file(
+  "cmake/Config.cmake.in"
   "${PROJECT_CONFIG}"
-  INSTALL_DESTINATION "${CMAKE_INSTALL_CONFIG}")
+  INSTALL_DESTINATION "${CMAKE_INSTALL_CONFIG}"
+)
 
 # intall configuration
 #   * <prefix>/lib/cmake/Foo/FooConfig.cmake
 #   * <prefix>/lib/cmake/Foo/FooConfigVersion.cmake
-install(FILES "${PROJECT_CONFIG}" "${VERSION_CONFIG}"
-  DESTINATION "${CMAKE_INSTALL_CONFIG}")
+install(
+  FILES "${PROJECT_CONFIG}" "${VERSION_CONFIG}"
+  DESTINATION "${CMAKE_INSTALL_CONFIG}"
+)
 
 # install target configuration
 #   * <prefix>/lib/cmake/Foo/FooTargets.cmake
-install(EXPORT ${TARGET_EXPORT_NAME}
-  DESTINATION "${CMAKE_INSTALL_CONFIG}")
+install(
+  EXPORT ${TARGET_EXPORT_NAME}
+  DESTINATION "${CMAKE_INSTALL_CONFIG}"
+)
 
 # # scripts directory
 # install(
@@ -151,7 +165,8 @@ install(EXPORT ${TARGET_EXPORT_NAME}
 # # data dir
 install(
   DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/data/
-  DESTINATION "${CMAKE_INSTALL_DATADIR}")
+  DESTINATION "${CMAKE_INSTALL_DATADIR}"
+)
 
 ################################################################################
 # cpack -G ZIP -C RelWithDebInfo
@@ -168,8 +183,10 @@ include(CPack)
 
 set(INI_FILE "${PROJECT_SOURCE_DIR}/data/setup.ini")
 set(DATA_DIR "${PROJECT_SOURCE_DIR}/data")
-configure_file("${PROJECT_SOURCE_DIR}/OpenSimRT/Settings.h.in"
-  "${PROJECT_SOURCE_DIR}/OpenSimRT/Settings.h")
+configure_file(
+  "${PROJECT_SOURCE_DIR}/OpenSimRT/Settings.h.in"
+  "${PROJECT_SOURCE_DIR}/OpenSimRT/Settings.h"
+)
 set(CMAKE_EXTRA_INCLUDE_FILES)
 
 ################################################################################

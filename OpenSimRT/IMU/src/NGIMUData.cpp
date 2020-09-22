@@ -8,19 +8,19 @@ using namespace OpenSimRT;
 
 SimTK::Vector NGIMUData::asVector() const {
     SimTK::Vector vec(14);
-    vec[0] = this->quaternion.q1;
-    vec[1] = this->quaternion.q2;
-    vec[2] = this->quaternion.q3;
-    vec[3] = this->quaternion.q4;
-    vec[4] = this->sensors.acceleration.ax;
-    vec[5] = this->sensors.acceleration.ay;
-    vec[6] = this->sensors.acceleration.az;
-    vec[7] = this->sensors.gyroscope.gx;
-    vec[8] = this->sensors.gyroscope.gy;
-    vec[9] = this->sensors.gyroscope.gz;
-    vec[10] = this->sensors.magnetometer.mx;
-    vec[11] = this->sensors.magnetometer.my;
-    vec[12] = this->sensors.magnetometer.mz;
-    vec[13] = this->sensors.barometer.barometer;
+    vec[0] = this->quaternion.q[0];
+    vec[1] = this->quaternion.q[1];
+    vec[2] = this->quaternion.q[2];
+    vec[3] = this->quaternion.q[3];
+    vec[4] = this->sensors.acceleration.a[0];
+    vec[5] = this->sensors.acceleration.a[1];
+    vec[6] = this->sensors.acceleration.a[2];
+    vec[7] = this->sensors.gyroscope.g[0];
+    vec[8] = this->sensors.gyroscope.g[1];
+    vec[9] = this->sensors.gyroscope.g[2];
+    vec[10] = this->sensors.magnetometer.m[0];
+    vec[11] = this->sensors.magnetometer.m[1];
+    vec[12] = this->sensors.magnetometer.m[2];
+    vec[13] = this->sensors.barometer;
     return vec;
 }

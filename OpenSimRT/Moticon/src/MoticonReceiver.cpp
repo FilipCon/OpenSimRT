@@ -1,16 +1,46 @@
 #include "MoticonReceiver.h"
 
+#include "Exception.h"
+
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/BigMatrix.h>
+
 using namespace SimTK;
 using namespace std;
 
-#define LOCAL_PORT 8888
 #define BUFFER_SIZE 4096 // TODO for large input values might need larger value
 
-MoticonReceiver::MoticonReceiver() { socket.Bind(LOCAL_PORT); }
+Vector MoticonReceiver::MoticonReceivedBundle::asVector() const {
+    SimTK::Vector v(50, 0.0);
+    v(0, 3) = Vector(left.acceleration);
+    v(3, 3) = Vector(left.angularRate);
+    v(6, 2) = Vector(left.cop);
+    v(8, 16) = Vector(left.pressure);
+    v(24, 1) = Vector(left.totalForce);
+    v(25, 3) = Vector(right.acceleration);
+    v(28, 3) = Vector(right.angularRate);
+    v(31, 2) = Vector(right.cop);
+    v(33, 16) = Vector(right.pressure);
+    v(49, 1) = Vector(right.totalForce);
+    return v;
+}
+
+MoticonReceiver::MoticonReceiver(const string& ip, const int& port) {
+    setup(ip, port);
+}
+MoticonReceiver::~MoticonReceiver() {
+    delete endPoint;
+    delete socket;
+}
+void MoticonReceiver::setup(const string& ip, const int& port) {
+    endPoint = new IpEndpointName(ip.c_str(), port);
+    socket = new UdpReceiveSocket(*endPoint);
+}
 
 string MoticonReceiver::getStream() {
+    // if (!socket->IsBound()) THROW_EXCEPTION("Moticon: Socket is not bound");
     char buffer[BUFFER_SIZE];
-    sockaddr_in add = socket.RecvFrom(buffer, sizeof(buffer));
+    socket->ReceiveFrom(*endPoint, buffer, sizeof(buffer));
     return string(buffer);
 }
 
@@ -27,6 +57,18 @@ vector<double> MoticonReceiver::splitInputStream(string str, string delimiter) {
         str.erase(0, pos + delimiter.length());
     }
     return result;
+}
+
+OpenSim::TimeSeriesTable MoticonReceiver::initializeLogger() {
+    vector<string> columnNames = {
+            "L.Acceleration: ", "L.AngularRate: ", "L.CoP: ",
+            "L.Pressure: ",     "L.TotalForce: ",  "R.Acceleration: ",
+            "R.AngularRate: ",  "R.CoP: ",         "R.Pressure: ",
+            "R.TotalForce: "};
+
+    OpenSim::TimeSeriesTable q;
+    q.setColumnLabels(columnNames);
+    return q;
 }
 
 MoticonReceiver::MoticonReceivedBundle MoticonReceiver::receiveData() {

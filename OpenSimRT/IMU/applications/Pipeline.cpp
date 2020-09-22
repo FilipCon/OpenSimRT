@@ -1,6 +1,7 @@
 #include "IMUCalibrator.h"
 #include "INIReader.h"
 #include "InverseKinematics.h"
+#include "MoticonReceiver.h"
 #include "NGIMUInputDriver.h"
 #include "OpenSimUtils.h"
 #include "Settings.h"
@@ -14,6 +15,7 @@
 #include <SimTKcommon/internal/State.h>
 #include <Simulation/Model/Model.h>
 #include <exception>
+#include <future>
 #include <iostream>
 #include <simbody/internal/Visualizer.h>
 #include <thread>
@@ -29,8 +31,10 @@ void run() {
     // auto section = "UPPER_LIMB_NGIMU";
     auto IMU_IP = ini.getVector(section, "IMU_IP", vector<string>());
     auto LISTEN_IP = ini.getString(section, "LISTEN_IP", "0.0.0.0");
-    auto SEND_PORTS = ini.getVector(section, "SEND_PORTS", vector<int>());
-    auto LISTEN_PORTS = ini.getVector(section, "LISTEN_PORTS", vector<int>());
+    auto SEND_PORTS = ini.getVector(section, "IMU_SEND_PORTS", vector<int>());
+    auto LISTEN_PORTS =
+            ini.getVector(section, "IMU_LISTEN_PORTS", vector<int>());
+    auto INSOLES_PORT = ini.getInteger(section, "INSOLE_LISTEN_PORT", 0);
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
@@ -69,10 +73,14 @@ void run() {
     // manager
     NGIMUInputDriver driver;
     driver.setupInput(imuObservationOrder,
-                           vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
-                           LISTEN_PORTS);
+                      vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
+                      LISTEN_PORTS);
     driver.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
     auto imuLogger = driver.initializeLogger();
+
+    // insole driver
+    MoticonReceiver mt(LISTEN_IP, INSOLES_PORT);
+    auto mtLogger = mt.initializeLogger();
 
     // calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
@@ -85,8 +93,8 @@ void run() {
 
     // visualizer
     BasicModelVisualizer visualizer(model);
-    // auto vectorDecorator = new ForceDecorator(Green, 1, 3);
-    // visualizer.addDecorationGenerator(vectorDecorator);
+    auto vectorDecorator = new ForceDecorator(Green, 0.1, 3);
+    visualizer.addDecorationGenerator(vectorDecorator);
 
     TimeSeriesTable avp;
     vector<string> columnNames{"px", "py", "pz"};
@@ -96,6 +104,8 @@ void run() {
         while (true) {
             // get input from imus
             auto imuDataFrame = driver.getFrame();
+            auto handle = std::async(std::launch::async,
+                                     &MoticonReceiver::receiveData, &mt);
 
             // estimate position from IMUs
             auto pos = pt.computePosition(imuDataFrame) + height;
@@ -106,14 +116,21 @@ void run() {
             auto pose = ik.solve(
                     clb.transform(imuDataFrame, vector<SimTK::Vec3>{pos}));
 
+            auto insoleDataFrame = handle.get();
+
+            const auto& cop = insoleDataFrame.right.cop;
+            const auto& force = insoleDataFrame.right.totalForce;
+
             // visualize
             visualizer.update(pose.q);
-            // Vec3 pelvisJoint;
-            // visualizer.expressPositionInGround("pelvis", Vec3(0), pelvisJoint);
-            // vectorDecorator->update(pelvisJoint, vel);
+            Vec3 pelvisJoint;
+            vectorDecorator->update(Vec3(cop[1], 0, cop[0]),
+                                    force * Vec3(0, 1, 0));
 
             // record
             imuLogger.appendRow(pose.t, ~driver.asVector(imuDataFrame));
+            // mtLogger.appendRow(insoleDataFrame.timestamp,
+            //                    ~insoleDataFrame.asVector());
             qLogger.appendRow(pose.t, ~pose.q);
             avp.appendRow(pose.t, ~Vector(pos));
         }
@@ -131,6 +148,8 @@ void run() {
                               subjectDir + "experimental_data/ngimu_data.csv");
         CSVFileAdapter::write(avp,
                               subjectDir + "experimental_data/estimates.csv");
+        // CSVFileAdapter::write(mtLogger,
+        //                       subjectDir + "experimental_data/moticon.csv");
     }
 }
 

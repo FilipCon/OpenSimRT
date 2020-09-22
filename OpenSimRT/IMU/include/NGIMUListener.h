@@ -17,11 +17,15 @@ namespace OpenSimRT {
 class IMU_API NGIMUListener : public osc::OscPacketListener,
                               public ListenerAdapter<NGIMUData> {
  public:
+    NGIMUListener();
+    ~NGIMUListener();
     osc::uint64 timeTag; // TODO time is measured from 1970
 
     //// TODO: add more pointers to imu data if required
-    NGIMUData::Quaternion* quaternion = nullptr;
-    NGIMUData::Sensors* sensors = nullptr;
+    NGIMUData::Quaternion* quaternion;
+    NGIMUData::Sensors* sensors;
+    NGIMUData::LinearAcceleration* linear;
+    NGIMUData::Altitude* altitude;
 
  protected:
     void ProcessBundle(const osc::ReceivedBundle&,

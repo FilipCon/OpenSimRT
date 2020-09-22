@@ -1,10 +1,11 @@
 #pragma once
 
 #include "InverseKinematics.h"
-#include "NGIMUInputDriver.h"
 #include "MahonyAHRS.h"
-#include "internal/IMUExports.h"
+#include "NGIMUInputDriver.h"
 #include "SignalProcessing.h"
+#include "internal/IMUExports.h"
+
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/Rotation.h>
 #include <Simulation/Model/Model.h>
@@ -33,8 +34,6 @@ class IMU_API IMUCalibrator {
     std::vector<NGIMUData> initIMUData;
 };
 
-
-
 class IMU_API PositionTracker {
  public:
     PositionTracker(const OpenSim::Model& model,
@@ -46,7 +45,6 @@ class IMU_API PositionTracker {
  private:
     OpenSim::Model model;
     std::vector<std::string> imuLabels;
-    // SimTK::ReferencePtr<MahonyAHRS> ahrs;
     SimTK::ReferencePtr<NumericalIntegrator> accelerationIntegrator;
     SimTK::ReferencePtr<NumericalIntegrator> velocityIntegrator;
 
@@ -54,7 +52,5 @@ class IMU_API PositionTracker {
     SimTK::ReferencePtr<ButterworthFilter> accelerationLPFilter;
     SimTK::ReferencePtr<ButterworthFilter> velocityHPFilter;
     SimTK::ReferencePtr<ButterworthFilter> positionHPFilter;
-
-    SimTK::Rotation modelOffsetRot;
-    };
+};
 } // namespace OpenSimRT

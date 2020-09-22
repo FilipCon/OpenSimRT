@@ -8,7 +8,7 @@ find_library(oscpack
   PATHS ${OSCPACK_DIR}/lib
   PATH_SUFFIXES lib)
 set(OSCPACK_LIBRARIES ${oscpack})
-set(DEPENDENCY_LIBRARIES ${OpenSim_LIBRARIES} ${OSCPACK_LIBRARIES} RealTime Common)
+set(DEPENDENCY_LIBRARIES ${OpenSim_LIBRARIES} ${OSCPACK_LIBRARIES} RealTime Common Moticon)
 
 if(WIN32)
   set(DEPENDENCY_LIBRARIES ${DEPENDENCY_LIBRARIES} Ws2_32 winmm)
@@ -24,6 +24,7 @@ file(GLOB tests tests/*.cpp)
 include_directories(include/)
 include_directories(../RealTime/include/)
 include_directories(../Common/include/)
+include_directories(../Moticon/include/)
 
 # dynamic library
 set(target NGIMU)

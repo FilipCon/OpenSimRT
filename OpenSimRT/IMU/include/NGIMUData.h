@@ -1,6 +1,8 @@
 #pragma once
 #include "internal/IMUExports.h"
 
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/Quaternion.h>
 #include <Simbody.h>
 #include <osc/OscTypes.h>
 
@@ -9,33 +11,40 @@ namespace OpenSimRT {
 // NGIMU data container
 struct IMU_API NGIMUData {
     struct Quaternion {
-        double q1, q2, q3, q4;
+        SimTK::Quaternion q;
         osc::uint64 timeStamp;
     };
     struct Sensors {
         struct Acceleration {
-            double ax, ay, az;
+            SimTK::Vec3 a;
         };
         struct Gyroscope {
-            double gx, gy, gz;
+            SimTK::Vec3 g;
         };
         struct Magnetometer {
-            double mx, my, mz;
-        };
-        struct Barometer {
-            double barometer;
+            SimTK::Vec3 m;
         };
         Acceleration acceleration; // in g
         Gyroscope gyroscope;       // in circ/sec
         Magnetometer magnetometer; // in uT
-        Barometer barometer;       // in hPa
+        double barometer;       // in hPa
         osc::uint64 timeStamp;
     };
-    Quaternion quaternion;
+    struct LinearAcceleration {
+        SimTK::Vec3 a;
+        osc::uint64 timeStamp;
+    };
+    struct Altitude {
+        double x;
+        osc::uint64 timeStamp;
+    };
+
     Sensors sensors;
+    Quaternion quaternion;
+    LinearAcceleration linear;
+    Altitude altitude;
     static int size() { return 14; }
     SimTK::Vector asVector() const;
 };
-
 
 } // namespace OpenSimRT

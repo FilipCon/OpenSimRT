@@ -1,4 +1,5 @@
 #include "NGIMUInputDriver.h"
+
 #include "InverseKinematics.h"
 #include "NGIMUListener.h"
 #include "OpenSimUtils.h"
@@ -49,10 +50,19 @@ void sendMessage(UdpTransmitSocket& socket, const std::string& command,
 /*******************************************************************************/
 
 NGIMUInputDriver::NGIMUInputDriver(const std::vector<std::string>& names,
-                           const std::vector<std::string>& ips,
-                           const std::vector<int>& ports)
+                                   const std::vector<std::string>& ips,
+                                   const std::vector<int>& ports)
         : NGIMUInputDriver() {
     setupInput(names, ips, ports);
+}
+
+NGIMUInputDriver::~NGIMUInputDriver() {
+    for (auto listener : listeners) delete listener;
+    for (auto socket : udpSockets) delete socket;
+    for (auto x : buffer) delete x.second;
+    listeners.clear();
+    udpSockets.clear();
+    buffer.clear();
 }
 
 void NGIMUInputDriver::setupInput(const std::vector<std::string>& names,
@@ -69,14 +79,15 @@ void NGIMUInputDriver::setupInput(const std::vector<std::string>& names,
         listeners[i]->driver = this;
 
         // initialize manager buffer
-        buffer[ports[i]] = new CircularBuffer<CIRCULAR_BUFFER_SIZE, NGIMUData>();
+        buffer[ports[i]] =
+                new CircularBuffer<CIRCULAR_BUFFER_SIZE, NGIMUData>();
     }
 }
 
-void NGIMUInputDriver::setupTransmitters(const std::vector<std::string>& remoteIPs,
-                                     const std::vector<int>& remotePorts,
-                                     const std::string& localIP,
-                                     const std::vector<int>& localPorts) {
+void NGIMUInputDriver::setupTransmitters(
+        const std::vector<std::string>& remoteIPs,
+        const std::vector<int>& remotePorts, const std::string& localIP,
+        const std::vector<int>& localPorts) {
     for (int i = 0; i < remoteIPs.size(); ++i) {
         // create socket
         UdpTransmitSocket socket(
@@ -87,6 +98,8 @@ void NGIMUInputDriver::setupTransmitters(const std::vector<std::string>& remoteI
         sendMessage(socket, "/wifi/send/port", localPorts[i]);
         sendMessage(socket, "/rate/sensors", 60);
         sendMessage(socket, "/rate/quaternion", 60);
+        sendMessage(socket, "/rate/linear", 60);
+        sendMessage(socket, "/rate/altitude", 60);
         sendMessage(socket, "/identify"); // bling!
     }
 }

@@ -26,20 +26,7 @@ using namespace OpenSim;
 using namespace SimTK;
 using namespace std;
 
-Rotation quat2rot(const Quaternion& q) {
-    Mat33 R;
-    R[0][0] = 2.0 * q[0] * q[0] - 1 + 2.0 * q[1] * q[1];
-    R[0][1] = 2.0 * (q[1] * q[2] + q[0] * q[3]);
-    R[0][2] = 2.0 * (q[1] * q[3] - q[0] * q[2]);
-    R[1][0] = 2.0 * (q[1] * q[2] - q[0] * q[3]);
-    R[1][1] = 2.0 * q[0] * q[0] - 1 + 2.0 * q[2] * q[2];
-    R[1][2] = 2.0 * (q[2] * q[3] + q[0] * q[1]);
-    R[2][0] = 2.0 * (q[1] * q[3] + q[0] * q[2]);
-    R[2][1] = 2.0 * (q[2] * q[3] - q[0] * q[1]);
-    R[2][2] = 2.0 * q[0] * q[0] - 1 + 2.0 * q[3] * q[3];
-    return Rotation(R);
-}
-
+/******************************************************************************/
 IMUCalibrator::IMUCalibrator(const Model& model, NGIMUInputDriver* const driver,
                              const vector<string>& imuLabels)
         : m_driver(driver) {
@@ -65,15 +52,15 @@ IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
 
     // imu data
     for (int i = 0; i < imuData.second.size(); ++i) {
-        const auto& q = imuData.second[i].quaternion; // current input
-        const auto& q0 = initIMUData[i].quaternion;   // initial input
+        const auto& q = imuData.second[i].quaternion.q; // current input
+        const auto& q0 = initIMUData[i].quaternion.q;   // initial input
         // transform from NGIMU earth frame to OpenSim reference system and
         // remove offset from initial input and IMU orientations in the model
         input.imuObservations.push_back(
-                (Rotation(Quaternion(q0.q1, -q0.q2, -q0.q3, -q0.q4)) *
+                (Rotation(Quaternion(q0[0], -q0[1], -q0[2], -q0[3])) *
                  imuModelOffsets[i])
                         .invert() *
-                Rotation(Quaternion(q.q1, -q.q2, -q.q3, -q.q4)) *
+                Rotation(Quaternion(q[0], -q[1], -q[2], -q[3])) *
                 imuModelOffsets[i]);
     }
 
@@ -104,19 +91,8 @@ PositionTracker::PositionTracker(
         const Model& otherModel,
         const std::vector<std::string>& observationOrder)
         : model(*otherModel.clone()) {
-    double samplingFreq = 60.0;
-
-    State state = model.initSystem();
-    model.realizePosition(state);
-
+    double samplingFreq = 60;
     imuLabels = observationOrder;
-
-    const PhysicalOffsetFrame* imuOffset = nullptr;
-    imuOffset = model.findComponent<PhysicalOffsetFrame>("pelvis_imu");
-    if (!imuOffset)
-        THROW_EXCEPTION("Tracker: PhysicalOffsetFrame does not exists "
-                        "in the model.");
-    modelOffsetRot = imuOffset->getOffsetTransform().R();
 
     // numerical integrator
     accelerationIntegrator = new NumericalIntegrator(3);
@@ -152,19 +128,13 @@ Vec3 PositionTracker::computePosition(
             std::find(imuLabels.begin(), imuLabels.end(), "pelvis_imu"));
 
     const auto& t = data.first;
-    const auto& acc = data.second[pelvisIndex].sensors.acceleration;
-    const auto& quat = data.second[pelvisIndex].quaternion;
+    // const auto& acc = data.second[pelvisIndex].sensors.acceleration;
+    const auto& linAcc = data.second[pelvisIndex].linear.a;
+    const auto& altitude = data.second[pelvisIndex].altitude.x;
 
-    const auto R = quat2rot(Quaternion(quat.q1, quat.q2, quat.q3, quat.q4));
-
-    // get the pelvis acceleration measurements relative to earth
-    auto t_acc = (R * Vec3(acc.ax, acc.ay, acc.az) - Vec3(0, 0, 1)) *
-                 abs(model.getGravity()[1]);
-
-    // filter acceleration
+    // LP filter acceleration
     const auto a_f = accelerationLPFilter->filter(
-            accelerationHPFilter->filter(Vector(t_acc)));
-    // const auto a_f = Vector(t_acc);
+            accelerationHPFilter->filter(Vector(linAcc)));
 
     // double p = 20;
     // auto fc = (a_f.norm() > 1 / p) ? 1 / (a_f.norm() * p) : 2;
@@ -188,7 +158,6 @@ Vec3 PositionTracker::computePosition(
     // auto posVector = positionHPFilter->filter(
     //         velocityIntegrator->integrate(Vector(vel), t));
     auto posVector = velocityIntegrator->integrate(Vector(vel), t);
-
     return Vec3(0, posVector[2], 0);
 }
 
