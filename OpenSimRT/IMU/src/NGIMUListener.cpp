@@ -4,6 +4,7 @@
 
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/Quaternion.h>
+#include <cstring>
 #include <memory>
 
 using namespace std;
@@ -88,6 +89,11 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
         // TODO add more patterns if necessary
         // ...
         //
+
+        if (strcmp(m.AddressPattern(), "/button") == 0) {
+            driver->stopListening(); // TODO do something else with it
+            THROW_EXCEPTION("Destruction Button is Pressed! Goodbye cruel word!");
+        }
 
         // when all messages are processed, push IMU bundle to buffer
         if (quaternion && sensors && linear && altitude) {

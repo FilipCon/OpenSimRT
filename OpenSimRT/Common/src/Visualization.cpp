@@ -4,6 +4,8 @@
 #include "Utils.h"
 
 #include <OpenSim/Simulation/Model/Muscle.h>
+#include <Simulation/Model/PhysicalOffsetFrame.h>
+#include <Simulation/SimbodyEngine/Body.h>
 #include <cmath>
 
 using namespace std;
@@ -120,8 +122,7 @@ void BasicModelVisualizer::update(const Vector& q,
     // terminate simulation when menu option is selected
     int menuId, item;
     silo->takeMenuPick(menuId, item);
-    if (menuId == int(MenuID::SIMULATION) && item == int(SimMenuItem::QUIT))
-    {
+    if (menuId == int(MenuID::SIMULATION) && item == int(SimMenuItem::QUIT)) {
         visualizer->shutdown();
         THROW_EXCEPTION("End Simulation. Bye!");
     }
@@ -140,9 +141,42 @@ void BasicModelVisualizer::expressPositionInGround(
         SimTK::Vec3& toBodyPoint) {
 #ifndef CONTINUOUS_INTEGRATION
     model.realizePosition(state);
-    model.getSimbodyEngine().transformPosition(
-            state, model.getBodySet().get(fromBodyName), fromBodyPoint,
-            model.getGround(), toBodyPoint);
+    const OpenSim::PhysicalOffsetFrame* physicalFrame = nullptr;
+    const OpenSim::Body* body = nullptr;
+    if ((body = model.findComponent<OpenSim::Body>(fromBodyName))) {
+        toBodyPoint = body->findStationLocationInGround(state, fromBodyPoint);
+    } else if ((physicalFrame =
+                        model.findComponent<OpenSim::PhysicalOffsetFrame>(
+                                fromBodyName))) {
+        toBodyPoint = physicalFrame->findStationLocationInGround(state,
+                                                                 fromBodyPoint);
+    } else {
+        THROW_EXCEPTION("Named body or frame does not exist.");
+    }
 #endif // CONTINUOUS_INTEGRATION
 }
+void BasicModelVisualizer::expressPositionInAnotherFrame(
+        const std::string& fromBodyName, const SimTK::Vec3& fromBodyPoint,
+        const std::string& toBodyName, SimTK::Vec3& toBodyPoint) {
+#ifndef CONTINUOUS_INTEGRATION
+    model.realizePosition(state);
+    const OpenSim::PhysicalOffsetFrame* physicalFrame = nullptr;
+    const OpenSim::Body* body = nullptr;
+    if ((body = model.findComponent<OpenSim::Body>(fromBodyName))) {
+        const auto& toBody = model.findComponent<OpenSim::Body>(toBodyName);
+        toBodyPoint = body->findStationLocationInAnotherFrame(
+                state, fromBodyPoint, *toBody);
+    } else if ((physicalFrame =
+                        model.findComponent<OpenSim::PhysicalOffsetFrame>(
+                                fromBodyName))) {
+        const auto& toPhysicalFrame =
+                model.findComponent<OpenSim::PhysicalOffsetFrame>(toBodyName);
+        toBodyPoint = physicalFrame->findStationLocationInAnotherFrame(
+                state, fromBodyPoint, *toPhysicalFrame);
+    } else {
+        THROW_EXCEPTION("Named body or frame does not exist.");
+    }
+#endif // CONTINUOUS_INTEGRATION
+}
+
 /******************************************************************************/

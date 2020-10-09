@@ -15,7 +15,7 @@ endif()
 # files
 file(GLOB includes include/*.h)
 file(GLOB sources src/*.cpp)
-# file(GLOB tests tests/*.cpp)
+file(GLOB tests tests/*.cpp)
 
 message(${includes})
 message(${sources})
@@ -36,11 +36,11 @@ addLibrary(
     LINKLIBS ${DEPENDENCY_LIBRARIES}
 )
 
-# # tests
-# addTests(
-#     TESTPROGRAMS ${tests}
-#     LINKLIBS ${target} ${DEPENDENCY_LIBRARIES}
-# )
+# tests
+addTests(
+    TESTPROGRAMS ${tests}
+    LINKLIBS ${target} ${DEPENDENCY_LIBRARIES}
+)
 
 # # applications
 # addApplications(

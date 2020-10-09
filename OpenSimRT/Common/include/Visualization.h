@@ -87,6 +87,10 @@ class Common_API BasicModelVisualizer {
     void expressPositionInGround(const std::string& fromBodyName,
                                  const SimTK::Vec3& fromBodyPoint,
                                  SimTK::Vec3& toBodyPoint);
+    void expressPositionInAnotherFrame(const std::string& fromBodyName,
+                                       const SimTK::Vec3& fromBodyPoint,
+                                       const std::string& toBodyName,
+                                       SimTK::Vec3& toBodyPoint);
 
  private:
     OpenSim::Model model;
@@ -97,7 +101,7 @@ class Common_API BasicModelVisualizer {
     bool shouldTerminate;
 
     enum class MenuID { SIMULATION }; //// TODO: Add more Menus
-    enum class SimMenuItem { QUIT }; //// TODO: Add more functionalities
+    enum class SimMenuItem { QUIT };  //// TODO: Add more functionalities
 };
 
 } // namespace OpenSimRT

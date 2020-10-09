@@ -1,26 +1,47 @@
 #include "NGIMUData.h"
+
+#include "Utils.h"
+
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/BigMatrix.h>
+#include <SimTKcommon/internal/Quaternion.h>
+#include <cstring>
+#include <deque>
 using namespace OpenSimRT;
+using namespace SimTK;
 
 // // operator overload
 // std::ostream& operator<<(std::ostream& os, const NGIMUData::Quaternion& q) {
 //     return os << q.q1 << " " << q.q2 << " " << q.q3 << " " << q.q4;
 // }
 
-SimTK::Vector NGIMUData::asVector() const {
-    SimTK::Vector vec(14);
-    vec[0] = this->quaternion.q[0];
-    vec[1] = this->quaternion.q[1];
-    vec[2] = this->quaternion.q[2];
-    vec[3] = this->quaternion.q[3];
-    vec[4] = this->sensors.acceleration.a[0];
-    vec[5] = this->sensors.acceleration.a[1];
-    vec[6] = this->sensors.acceleration.a[2];
-    vec[7] = this->sensors.gyroscope.g[0];
-    vec[8] = this->sensors.gyroscope.g[1];
-    vec[9] = this->sensors.gyroscope.g[2];
-    vec[10] = this->sensors.magnetometer.m[0];
-    vec[11] = this->sensors.magnetometer.m[1];
-    vec[12] = this->sensors.magnetometer.m[2];
-    vec[13] = this->sensors.barometer;
-    return vec;
+Vector NGIMUData::asVector() const {
+    double v[this->size()];
+    int i = 0;
+    vectorToDouble(Vector(this->quaternion.q), v + i);
+    i += 4;
+    vecToDouble(this->sensors.acceleration.a, v + i);
+    i += 3;
+    vecToDouble(this->sensors.gyroscope.g, v + i);
+    i += 3;
+    vecToDouble(this->sensors.magnetometer.m, v + i);
+    i += 3;
+    std::memcpy(v + i, &this->sensors.barometer, sizeof(double));
+    i += 1;
+    vecToDouble(this->linear.a, v + i);
+    i += 3;
+    std::memcpy(v + i, &this->altitude, sizeof(double));
+    i += 1;
+    return std::move(Vector_<double>(this->size(), v, true));
+}
+
+void NGIMUData::fromVector(const Vector& v){
+    int i = 0;
+    this->quaternion.q = SimTK::Quaternion(v[0], v[1], v[2], v[3]);
+    this->sensors.acceleration.a = Vec3(v[4], v[5], v[6]);
+    this->sensors.gyroscope.g = Vec3(v[7], v[8], v[9]);
+    this->sensors.magnetometer.m =  Vec3(v[10], v[11], v[12]);
+    this->sensors.barometer = v[13];
+    this->linear.a = v[14], v[15], v[16];
+    this->altitude.x = v[17];
 }

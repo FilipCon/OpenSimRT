@@ -10,6 +10,7 @@
 
 #include "internal/CommonExports.h"
 
+#include <SimTKcommon/internal/BigMatrix.h>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -67,6 +68,21 @@ std::string dump(const T& vec, std::string delimiter,
         row += toString(vec.at(i));
     }
     return row;
+}
+
+/**
+ * Vec<T> to double*
+ */
+template <int T>
+void vecToDouble(const SimTK::Vec<T>& source, double* destination) {
+    for (int i = 0; i < source.size(); ++i) destination[i] = source[i];
+}
+/**
+ * Vector_<T> to double*
+ */
+template <typename T>
+void vectorToDouble(const SimTK::Vector_<T>& source, double* destination) {
+    for (int i = 0; i < source.size(); ++i) destination[i] = source[i];
 }
 
 } // namespace OpenSimRT

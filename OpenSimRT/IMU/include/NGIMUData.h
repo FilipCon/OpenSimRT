@@ -43,8 +43,9 @@ struct IMU_API NGIMUData {
     Quaternion quaternion;
     LinearAcceleration linear;
     Altitude altitude;
-    static int size() { return 14; }
+    static int size() { return 18; }
     SimTK::Vector asVector() const;
+    void fromVector(const SimTK::Vector&);
 };
 
 } // namespace OpenSimRT

@@ -11,6 +11,11 @@
 #include <Common/TimeSeriesTable.h>
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
 #include <iterator>
 #include <tuple>
 #include <type_traits>
@@ -22,6 +27,28 @@ using namespace std::chrono;
 using namespace OpenSimRT;
 
 #define OUTPUT_BUFFER_SIZE 1024
+
+#define PICOSECS_RESOLUTION_BIN 4294967295UL // pow(2, 32)
+#define PICOSECS_RESOLUTION_DEC 1000000000   // pow(10, 9)
+#define TIME_NOW                                                               \
+    duration_cast<nanoseconds>(                                                \
+            high_resolution_clock::now().time_since_epoch())                   \
+            .count()
+
+#define RFC_PROTOCOL                                                           \
+    2208988800UL // RFC protocol counting 70 years since Jan 1 1900, 00:00 GMT
+#define GMT_LOCAL_TIMEZONE 10800UL // Timezone in Greece is GMT+03:00
+
+/*  TODO this is shit!
+ */
+static TimeTag tv2ntp() {
+    auto time = static_cast<double>(TIME_NOW) / PICOSECS_RESOLUTION_DEC;
+    auto fracpart =
+            static_cast<uint32_t>((time - int(time)) * PICOSECS_RESOLUTION_DEC);
+    auto intpart =
+            static_cast<uint64_t>(time) + RFC_PROTOCOL + GMT_LOCAL_TIMEZONE;
+    return TimeTag((intpart << 32) + fracpart);
+}
 
 /**
  * @brief Type-agnostic variadic template function for sending messages to
@@ -57,6 +84,7 @@ NGIMUInputDriver::NGIMUInputDriver(const std::vector<std::string>& names,
 }
 
 NGIMUInputDriver::~NGIMUInputDriver() {
+    // delete every new object and clear lists
     for (auto listener : listeners) delete listener;
     for (auto socket : udpSockets) delete socket;
     for (auto x : buffer) delete x.second;
@@ -94,12 +122,15 @@ void NGIMUInputDriver::setupTransmitters(
                 IpEndpointName(remoteIPs[i].c_str(), remotePorts[i]));
 
         // send commands to imu
+        sendMessage(socket, "/time", tv2ntp());
         sendMessage(socket, "/wifi/send/ip", localIP.c_str());
         sendMessage(socket, "/wifi/send/port", localPorts[i]);
+        sendMessage(socket, "/wifi/client/lowpower", false);
         sendMessage(socket, "/rate/sensors", 60);
         sendMessage(socket, "/rate/quaternion", 60);
         sendMessage(socket, "/rate/linear", 60);
         sendMessage(socket, "/rate/altitude", 60);
+        sendMessage(socket, "/ahrs/magnetometer", true);
         sendMessage(socket, "/identify"); // bling!
     }
 }
@@ -120,6 +151,7 @@ void NGIMUInputDriver::startListening() {
     mux.RunUntilSigInt();
 }
 
+// required to terminate simulation
 void NGIMUInputDriver::stopListening() { mux.Break(); }
 
 NGIMUInputDriver::IMUDataFrame NGIMUInputDriver::getFrame() {
@@ -128,17 +160,22 @@ NGIMUInputDriver::IMUDataFrame NGIMUInputDriver::getFrame() {
     for (const auto& listener : listeners) {
         results.push_back(buffer[listener->port]->get(CIRCULAR_BUFFER_SIZE)[0]);
 
+        // keep the timestamp of sampled quaternions
         const auto& timeStamp = results.back().quaternion.timeStamp;
-        unsigned last32bitsValue = timeStamp & 0xFFFFFFFF;
-        unsigned first32bitsValue = (timeStamp >> 32) & 0xFFFFFFFF;
 
-        time = first32bitsValue + last32bitsValue * pow(2.0, -32);
-        if (initFrameTime == 0) initFrameTime = time;
-        time -= initFrameTime;
+        // the 32-first bits are the #seconds since Jan 1 1900 00:00 GMT. To
+        // start from 1970 (Unix epoch), remove the 70 years in seconds. Add 3
+        // hours since local timezone is GMT+03:00
+        time = (timeStamp >> 32) +
+               double(timeStamp & 0xFFFFFFFF) / PICOSECS_RESOLUTION_BIN -
+               RFC_PROTOCOL - GMT_LOCAL_TIMEZONE;
+        // if (initFrameTime == 0) initFrameTime = time;
+        // time -= initFrameTime;
     }
     return make_pair(time, results);
 }
 
+// transform all imu dataFrames into a single vector
 SimTK::Vector NGIMUInputDriver::asVector(const IMUDataFrame& imuDataFrame) {
     int n = NGIMUData::size();
     SimTK::Vector vec(n * imuDataFrame.second.size());
@@ -151,16 +188,22 @@ SimTK::Vector NGIMUInputDriver::asVector(const IMUDataFrame& imuDataFrame) {
 }
 
 OpenSim::TimeSeriesTable NGIMUInputDriver::initializeLogger() {
-    vector<string> suffixes = {"_q1", "_q2", "_q3", "_q4",      "_ax",
-                               "_ay", "_az", "_gx", "_gy",      "_gz",
-                               "_mx", "_my", "_mz", "barometer"};
+    vector<string> suffixes = {
+            "_q1",       "_q2",       "_q3",      "_q4",        "_ax",
+            "_ay",       "_az",       "_gx",      "_gy",        "_gz",
+            "_mx",       "_my",       "_mz",      "_barometer", "_linAcc_x",
+            "_linAcc_y", "_linAcc_z", "_altitude"};
 
+    // create column names for each combination of imu names and measurement
+    // suffixes
     vector<string> columnNames;
     for (const auto& listener : listeners) {
         for (const auto& suffix : suffixes) {
             columnNames.push_back(listener->name + suffix);
         }
     }
+
+    // return table
     OpenSim::TimeSeriesTable q;
     q.setColumnLabels(columnNames);
     return q;

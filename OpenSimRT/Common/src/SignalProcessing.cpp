@@ -523,4 +523,56 @@ Vector NumericalIntegrator::integrate(const SimTK::Vector& xn,
     x0 = x;
     return x;
 }
+
+/******************************************************************************/
+
+KalmanFilter::KalmanFilter(
+        const Matrix& A,
+        const Matrix& C,
+        const Matrix& Q,
+        const Matrix& R,
+        const Matrix& P,
+        const int& p)
+        : A(A), C(C), Q(Q), R(R), P0(P),
+          m(C.nrow()), n(A.ncol()), p(p), initialized(false) {
+    x_hat.resize(n, p);
+    x_hat_new.resize(n, p);
+    I.resize(n, n) = 1;
+}
+
+void KalmanFilter::init(const Vector& y0) {
+    Matrix x0(n, p);
+    x0.setToZero();
+    x0.updBlock(0, 0, 0, p) = y0.getAsMatrixView();
+    x_hat = x0;
+    P = P0;
+    initialized = true;
+}
+
+void KalmanFilter::init() {
+    x_hat.setToZero();
+    P = P0;
+    initialized = true;
+}
+
+Vector KalmanFilter::filter(const Vector& y) {
+
+    if (!initialized)
+        throw std::runtime_error("Filter is not initialized!");
+
+    x_hat_new = A * x_hat;
+    P = A * P * A.transpose() + Q;
+    K = P * C.transpose() * (C * P * C.transpose() + R).invert();
+    x_hat_new += K * (y.getAsMatrix().transpose() - C * x_hat_new);
+    P = (I - K * C) * P;
+    x_hat = x_hat_new;
+    return x_hat_new[0].getAsVector();
+}
+
+Vector KalmanFilter::filter(const Vector& y, const Matrix A) {
+
+    this->A = A;
+    return filter(y);
+}
+
 /******************************************************************************/

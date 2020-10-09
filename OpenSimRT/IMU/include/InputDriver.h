@@ -30,17 +30,6 @@ class IMU_API Driver {
     friend class ListenerAdapter<T>;
 
  public:
-    // setup listening sockets
-    virtual void setupInput(const std::vector<std::string>& names,
-                            const std::vector<std::string>& ips,
-                            const std::vector<int>& ports) = 0;
-
-    // setup transmitting messages, i.e. sensor settings
-    virtual void setupTransmitters(const std::vector<std::string>& remoteIPs,
-                                   const std::vector<int>& remotePorts,
-                                   const std::string& localIP,
-                                   const std::vector<int>& localPorts) = 0;
-
     // start listening to sockets
     virtual void startListening() = 0;
 
@@ -49,9 +38,6 @@ class IMU_API Driver {
 
     // obtain observations from IMU data.
     virtual std::pair<double, std::vector<T>> getFrame() = 0;
-
-    // create data logger
-    virtual OpenSim::TimeSeriesTable initializeLogger() = 0;
 
  protected:
     InputDriver() noexcept {};

@@ -6,12 +6,27 @@
 #include <Common/TimeSeriesTable.h>
 #include <SimTKcommon.h>
 #include <SimTKcommon/internal/BigMatrix.h>
+#include <map>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
+
+namespace OpenSimRT {
+
+struct Moticon_API MoticonInsoleSizes {
+    struct Size {
+        double length;
+        double width;
+    };
+
+    // TODO add more sizes
+    static Size size4() { return Size{0.2486, 0.089}; }
+};
 
 class Moticon_API MoticonReceiver {
  public:
+
     struct Moticon_API MoticonReceivedBundle {
         double timestamp;
         struct Measurement {
@@ -21,6 +36,7 @@ class Moticon_API MoticonReceiver {
             SimTK::Vec<16> pressure; // 16 sensors
             double totalForce;
         } left, right;
+        static int size() { return 50; };
         SimTK::Vector asVector() const;
     };
 
@@ -29,29 +45,20 @@ class Moticon_API MoticonReceiver {
     void setup(const std::string& ip, const int& port);
     MoticonReceivedBundle receiveData();
     OpenSim::TimeSeriesTable initializeLogger();
+    void setInsoleSize(const int&);
 
  private:
     UdpReceiveSocket* socket;
-    IpEndpointName *endPoint;
+    IpEndpointName* endPoint;
     std::string getStream();
     std::vector<double> splitInputStream(std::string, std::string);
+    double initFrameTime;
+    MoticonInsoleSizes::Size size;
 };
 
 /**
  * @brief Overwrite ostream operator for MoticonReceivedBundle
  */
 std::ostream& operator<<(std::ostream& os,
-                         const MoticonReceiver::MoticonReceivedBundle& m) {
-    os << "Time: " << m.timestamp << " "
-       << "L.Acceleration: " << m.left.acceleration << " "
-       << "L.AngularRate: " << m.left.angularRate << " "
-       << "L.CoP: " << m.left.cop << " "
-       << "L.Pressure: " << m.left.pressure << " "
-       << "L.TotalForce: " << m.left.totalForce << " "
-       << "R.Acceleration: " << m.right.acceleration << " "
-       << "R.AngularRate: " << m.right.angularRate << " "
-       << "R.CoP: " << m.right.cop << " "
-       << "R.Pressure: " << m.right.pressure << " "
-       << "R.TotalForce: " << m.right.totalForce;
-    return os;
-}
+                         const MoticonReceiver::MoticonReceivedBundle& m);
+} // namespace OpenSimRT

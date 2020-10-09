@@ -276,4 +276,70 @@ class Common_API NumericalIntegrator {
 
 } // namespace OpenSimRT
 
+/**
+ * @brief Kalman filter.
+ */
+
+class Common_API KalmanFilter {
+
+public:
+    /**
+  * Create a Kalman filter with the specified matrices.
+  *   A - System dynamics matrix
+  *   B - excluded //TODO
+  *   C - Output matrix
+  *   Q - Process noise covariance
+  *   R - Measurement noise covariance
+  *   P - Estimate error covariance
+  */
+    KalmanFilter(
+            const SimTK::Matrix& A,
+            const SimTK::Matrix& C,
+            const SimTK::Matrix& Q,
+            const SimTK::Matrix& R,
+            const SimTK::Matrix& P,
+            const int& p);
+
+    /**
+  * Initialize the filter with initial states as zero.
+  */
+    void init();
+
+    /**
+  * Initialize the filter with a guess for initial states.
+  */
+    void init(const SimTK::Vector& y0);
+
+    /**
+  * Update the estimated state based on measured values. The
+  * time step is assumed to remain constant.
+  */
+    SimTK::Vector filter(const SimTK::Vector& y);
+
+    /**
+  * Update the estimated state based on measured values,
+  * using the given time step and dynamics matrix.
+  */
+    SimTK::Vector filter(const SimTK::Vector& y, const SimTK::Matrix A);
+
+private:
+    // Matrices for computation
+    SimTK::Matrix A, C, Q, R, P, K, P0;
+
+    // System dimensions
+    int m, n, p;
+
+    // Discrete time step
+    double dt;
+
+    // Is the filter initialized?
+    bool initialized;
+
+    // n-size identity
+    SimTK::Matrix I;
+
+    // Estimated states
+    SimTK::Matrix x_hat, x_hat_new;
+};
+
 #endif

@@ -1,22 +1,33 @@
 #include "IMUCalibrator.h"
 
 #include "Exception.h"
+#include "InverseKinematics.h"
 #include "MahonyAHRS.h"
+#include "NGIMUData.h"
 #include "RealTimeAnalysis.h"
 #include "SignalProcessing.h"
 
+#include <Common/Exception.h>
+#include <OpenSim/Simulation/SimbodyEngine/CustomJoint.h>
+#include <OpenSim/Simulation/SimbodyEngine/SpatialTransform.h>
 #include <SimTKcommon/Constants.h>
+#include <SimTKcommon/Scalar.h>
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <SimTKcommon/internal/CoordinateAxis.h>
 #include <SimTKcommon/internal/Quaternion.h>
 #include <SimTKcommon/internal/Rotation.h>
 #include <SimTKcommon/internal/Transform.h>
+#include <SimTKcommon/internal/UnitVec.h>
 #include <SimTKcommon/internal/VectorMath.h>
 #include <Simulation/Model/Model.h>
+#include <Simulation/Model/PhysicalFrame.h>
 #include <Simulation/Model/PhysicalOffsetFrame.h>
+#include <Simulation/SimbodyEngine/Coordinate.h>
+#include <Simulation/SimbodyEngine/Joint.h>
 #include <chrono>
 #include <cmath>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -26,19 +37,142 @@ using namespace OpenSim;
 using namespace SimTK;
 using namespace std;
 
+// // hamilton quaternion product
+// template <typename A, typename B>
+// static inline SimTK::Quaternion quaternProd(const A& a, const B& b) {
+//     SimTK::Quaternion c;
+//     c[0] = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
+//     c[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
+//     c[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
+//     c[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
+//     return c;
+// }
+
+// SimTK::Quaternion quatConjugate(const SimTK::Quaternion& q) {
+//     return SimTK::Quaternion(q[0], -q[1], -q[2], -q[3]);
+// }
+
+// // compute the projection of a point or vector on a arbitrary plane
+// static inline Vec3 projectionOnPlane(const Vec3& point, const Vec3&
+// planeOrigin,
+//                                      const Vec3& planeNormal) {
+//     return point - dot(point - planeOrigin, planeNormal) * planeNormal;
+// }
+
+// /**
+//    Decompose the rotation on to 2 parts.
+//    1. Twist - rotation around the "direction" vector
+//    2. Swing - rotation around axis that is perpendicular to "direction"
+//    vector The rotation can be composed back by rotation = swing * twist
+
+//    has singularity in case of swing_rotation close to 180 degrees rotation.
+//    if the input quaternion is of non-unit length, the outputs are non-unit as
+//    well otherwise, outputs are both unit
+// */
+// static inline Quaternion quaternDecomposition(const Quaternion& q,
+//                                               const Vec3& direction) {
+//     UnitVec3 ra(q[1], q[2], q[3]);                  // rotation axis
+//     auto p = SimTK::dot(ra, direction) * direction; //  project v1 on to v2
+//     auto twist = Quaternion(q[0], p[0], p[1], p[2]).normalize();
+//     // auto swing = Quaternion(quaternProd(q, twist));
+//     return twist;
+// }
+
 /******************************************************************************/
-IMUCalibrator::IMUCalibrator(const Model& model, NGIMUInputDriver* const driver,
-                             const vector<string>& imuLabels)
-        : m_driver(driver) {
-    for (auto& imuName : imuLabels) {
-        const PhysicalOffsetFrame* imuOffset = nullptr;
-        if ((imuOffset = model.findComponent<PhysicalOffsetFrame>(imuName))) {
-            imuModelOffsets.push_back(
-                    imuOffset->getOffsetTransform().R().invert());
-        } else {
-            THROW_EXCEPTION("Calibrator: PhysicalOffsetFrame does not exists "
-                            "in the model.");
+IMUCalibrator::IMUCalibrator(const Model& otherModel,
+                             InputDriver<NGIMUData>* const driver,
+                             const vector<string>& observationOrder)
+    : m_driver(driver), model(*otherModel.clone()), R_heading(Rotation()) {
+    // copy observation order list
+    imuBodiesObservationOrder = std::vector<std::string>(
+            observationOrder.begin(), observationOrder.end());
+
+    // set rotation from imu ground to opensim ground
+    R_GoGi = Rotation(-SimTK::Pi / 2, SimTK::YAxis) *
+             Rotation(-SimTK::Pi / 2, SimTK::XAxis);
+
+    // initialize system
+    state = model.initSystem();
+    model.realizePosition(state);
+
+    // get default model pose body orientation in ground
+    for (const auto& label : imuBodiesObservationOrder) {
+        const PhysicalFrame* frame = nullptr;
+        if ((frame = model.findComponent<PhysicalFrame>(label))) {
+            imuBodiesInGround[label] = frame->getTransformInGround(state).R();
         }
+    }
+}
+
+void IMUCalibrator::computeheadingRotation(
+        const std::string& baseImuName,
+        const SimTK::CoordinateDirection baseHeadingDirection) {
+
+    // compute heading vector
+    auto headingRotationVec =
+            computeHeadingCorrection(baseImuName, baseHeadingDirection);
+
+    // set heading rotation
+    R_heading =
+            Rotation(SimTK::BodyOrSpaceType::SpaceRotationSequence,
+                     headingRotationVec[0], SimTK::XAxis, headingRotationVec[1],
+                     SimTK::YAxis, headingRotationVec[2], SimTK::ZAxis);
+}
+
+SimTK::Vec3 IMUCalibrator::computeHeadingCorrection(
+        const std::string& baseImuName,
+        const SimTK::CoordinateDirection baseHeadingDirection) {
+    auto baseBodyIndex = std::distance(
+            imuBodiesObservationOrder.begin(),
+            std::find(imuBodiesObservationOrder.begin(),
+                      imuBodiesObservationOrder.end(), baseImuName));
+
+    const auto& q0 = initIMUData[baseBodyIndex].quaternion.q;
+    const auto base_R = R_GoGi * ~Rotation(q0);
+
+    UnitVec3 baseSegmentXheading = base_R(baseHeadingDirection.getAxis());
+    if (baseHeadingDirection.getDirection() < 0)
+        baseSegmentXheading = baseSegmentXheading.negate();
+    bool baseFrameFound = false;
+
+    const Frame* baseFrame = nullptr;
+    for (int j = 0; j < model.getNumJoints() && !baseFrameFound; ++j) {
+        auto& joint = model.getJointSet().get(j);
+
+        // look for body whose parent is ground
+        if (joint.getParentFrame().findBaseFrame() == model.getGround()) {
+            baseFrame = &(joint.getChildFrame().findBaseFrame());
+            baseFrameFound = true;
+            break;
+        }
+    }
+
+    OPENSIM_THROW_IF(!baseFrameFound, OpenSim::Exception,
+                     "No base segment was found");
+
+    Vec3 baseFrameX = UnitVec3(1, 0, 0);
+    const SimTK::Transform& baseXForm = baseFrame->getTransformInGround(state);
+    Vec3 baseFrameXInGround = baseXForm.xformFrameVecToBase(baseFrameX);
+
+    auto angularDifference = acos(~baseSegmentXheading * baseFrameXInGround);
+
+    // compute sign
+    auto xproduct = baseFrameXInGround % baseSegmentXheading;
+    if (xproduct.get(1) > 0) { angularDifference *= -1; }
+
+    return Vec3(0, angularDifference, 0);
+}
+
+void IMUCalibrator::calibrateIMUTasks(
+        vector<InverseKinematics::IMUTask>& imuTasks) {
+    for (int i = 0; i < initIMUData.size(); ++i) {
+        const auto& q0 = initIMUData[i].quaternion.q;
+        const auto R0 = R_heading * R_GoGi * ~Rotation(q0);
+
+        const auto& bodyName = imuTasks[i].body;
+        const auto R_FB = ~imuBodiesInGround[bodyName] * R0;
+
+        imuTasks[i].orientation = std::move(R_FB);
     }
 }
 
@@ -53,15 +187,8 @@ IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
     // imu data
     for (int i = 0; i < imuData.second.size(); ++i) {
         const auto& q = imuData.second[i].quaternion.q; // current input
-        const auto& q0 = initIMUData[i].quaternion.q;   // initial input
-        // transform from NGIMU earth frame to OpenSim reference system and
-        // remove offset from initial input and IMU orientations in the model
-        input.imuObservations.push_back(
-                (Rotation(Quaternion(q0[0], -q0[1], -q0[2], -q0[3])) *
-                 imuModelOffsets[i])
-                        .invert() *
-                Rotation(Quaternion(q[0], -q[1], -q[2], -q[3])) *
-                imuModelOffsets[i]);
+        const auto R = R_heading * R_GoGi * ~Rotation(q);
+        input.imuObservations.push_back(R);
     }
 
     // marker data
@@ -71,11 +198,7 @@ IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
     return input;
 }
 
-void IMUCalibrator::computeAvgStaticPose() {
-    initIMUData = *(quatTable.end() - 1); //// TODO: compute actual average
-}
-
-void IMUCalibrator::run(const double& timeout) {
+void IMUCalibrator::record(const double& timeout) {
     cout << "Recording Static Pose..." << endl;
     const auto start = chrono::steady_clock::now();
     while (std::chrono::duration_cast<chrono::seconds>(
@@ -87,80 +210,6 @@ void IMUCalibrator::run(const double& timeout) {
     computeAvgStaticPose();
 }
 
-PositionTracker::PositionTracker(
-        const Model& otherModel,
-        const std::vector<std::string>& observationOrder)
-        : model(*otherModel.clone()) {
-    double samplingFreq = 60;
-    imuLabels = observationOrder;
-
-    // numerical integrator
-    accelerationIntegrator = new NumericalIntegrator(3);
-    velocityIntegrator = new NumericalIntegrator(3);
-    int filterOrder = 2;
-    // construct filters
-    accelerationLPFilter =
-            new ButterworthFilter(filterOrder, (2 * 3) / samplingFreq,
-                                  ButterworthFilter::FilterType::LowPass,
-                                  IIRFilter::InitialValuePolicy::Zero);
-
-    accelerationHPFilter =
-            new ButterworthFilter(filterOrder, (2 * 0.001) / samplingFreq,
-                                  ButterworthFilter::FilterType::HighPass,
-                                  IIRFilter::InitialValuePolicy::Zero);
-
-    velocityHPFilter =
-            new ButterworthFilter(filterOrder, (2 * 0.1) / samplingFreq,
-                                  ButterworthFilter::FilterType::HighPass,
-                                  IIRFilter::InitialValuePolicy::Zero);
-
-    positionHPFilter =
-            new ButterworthFilter(filterOrder, (2 * 0.1) / samplingFreq,
-                                  ButterworthFilter::FilterType::HighPass,
-                                  IIRFilter::InitialValuePolicy::Zero);
+void IMUCalibrator::computeAvgStaticPose() {
+    initIMUData = *(quatTable.end() - 1); //// TODO: compute actual average
 }
-
-Vec3 PositionTracker::computePosition(
-        const std::pair<double, std::vector<NGIMUData>>& data) {
-    // get index of pelvis in the imu label list
-    const int pelvisIndex = std::distance(
-            imuLabels.begin(),
-            std::find(imuLabels.begin(), imuLabels.end(), "pelvis_imu"));
-
-    const auto& t = data.first;
-    // const auto& acc = data.second[pelvisIndex].sensors.acceleration;
-    const auto& linAcc = data.second[pelvisIndex].linear.a;
-    const auto& altitude = data.second[pelvisIndex].altitude.x;
-
-    // LP filter acceleration
-    const auto a_f = accelerationLPFilter->filter(
-            accelerationHPFilter->filter(Vector(linAcc)));
-
-    // double p = 20;
-    // auto fc = (a_f.norm() > 1 / p) ? 1 / (a_f.norm() * p) : 2;
-
-    // velocityHPFilter->setupFilter(2,  (2 * fc) / 60,
-    //                               ButterworthFilter::FilterType::HighPass,
-    //                               IIRFilter::InitialValuePolicy::Signal);
-
-    // compute velocity and filter velocity
-    const auto velVector =
-            velocityHPFilter->filter(accelerationIntegrator->integrate(a_f, t));
-
-    // return velocity based on acceleration threshold
-    const double threshold = 0.1;
-    double range = 0.1; // [0,1]
-    const auto vel = (a_f.norm() < threshold)
-                             ? Vec3(velVector[0], velVector[1], velVector[2]) *
-                                       pow(range, threshold - a_f.norm())
-                             : Vec3(velVector[0], velVector[1], velVector[2]);
-
-    // auto posVector = positionHPFilter->filter(
-    //         velocityIntegrator->integrate(Vector(vel), t));
-    auto posVector = velocityIntegrator->integrate(Vector(vel), t);
-    return Vec3(0, posVector[2], 0);
-}
-
-// SimTK::Vec3 PositionTracker::computePosition(const SimTK::Vec3& vel,
-//                                              const double& t) {
-// }

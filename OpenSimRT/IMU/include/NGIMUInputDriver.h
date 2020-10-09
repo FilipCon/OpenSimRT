@@ -1,6 +1,6 @@
 #pragma once
-#include "NGIMUData.h"
 #include "InputDriver.h"
+#include "NGIMUData.h"
 #include "ip/UdpSocket.h"
 
 /**
@@ -17,21 +17,22 @@ class IMU_API NGIMUInputDriver : public InputDriver<NGIMUData> {
                      const std::vector<std::string>&, const std::vector<int>&);
     ~NGIMUInputDriver();
 
+    virtual IMUDataFrame getFrame() override;
+
     // setup listening sockets
-    virtual void setupInput(const std::vector<std::string>& imuLabels,
-                            const std::vector<std::string>& ips,
-                            const std::vector<int>& ports) override;
+    void setupInput(const std::vector<std::string>& imuLabels,
+                    const std::vector<std::string>& ips,
+                    const std::vector<int>& ports);
 
     // setup transmitting messages to IMU
-    virtual void setupTransmitters(const std::vector<std::string>& remoteIPs,
-                                   const std::vector<int>& remotePorts,
-                                   const std::string& localIP,
-                                   const std::vector<int>& localPorts) override;
+    void setupTransmitters(const std::vector<std::string>& remoteIPs,
+                           const std::vector<int>& remotePorts,
+                           const std::string& localIP,
+                           const std::vector<int>& localPorts);
 
     virtual void startListening() override;
     virtual void stopListening() override;
-    virtual IMUDataFrame getFrame() override;
-    virtual OpenSim::TimeSeriesTable initializeLogger() override;
+    OpenSim::TimeSeriesTable initializeLogger();
 
     SimTK::Vector asVector(const IMUDataFrame& imuDataFrame);
 
