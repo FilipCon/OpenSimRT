@@ -25,11 +25,12 @@ class IMU_API IMUCalibrator {
                   InputDriver<NGIMUData>* const driver,
                   const std::vector<std::string>& observationOrder);
 
+    void setGroundOrientationSeq(const double& xDegrees, const double& yDegrees,
+                                 const double& zDegrees);
     void record(const double& timeout);
 
-    void computeheadingRotation(
-            const std::string& baseImuName,
-            const SimTK::CoordinateDirection baseHeadingDirection);
+    void computeheadingRotation(const std::string& baseImuName,
+                                const std::string& imuDirectionAxis);
     void calibrateIMUTasks(std::vector<InverseKinematics::IMUTask>& imuTasks);
 
     InverseKinematics::Input
@@ -38,9 +39,6 @@ class IMU_API IMUCalibrator {
 
  private:
     void computeAvgStaticPose();
-    SimTK::Vec3 computeHeadingCorrection(
-            const std::string& baseImuName,
-            const SimTK::CoordinateDirection baseHeadingDirection);
 
     OpenSim::Model model;
     SimTK::State state;
@@ -51,6 +49,5 @@ class IMU_API IMUCalibrator {
     std::vector<std::string> imuBodiesObservationOrder;
     SimTK::Rotation R_GoGi;
     SimTK::Rotation R_heading;
-
 };
 } // namespace OpenSimRT

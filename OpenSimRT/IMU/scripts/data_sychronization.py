@@ -18,27 +18,27 @@ insole_data = pd.read_csv(insole_data_file, skiprows=4)
 time_imu = imu_data['time']
 time_insole = insole_data['time']
 
-r_imu_column_names = ['calcn_r_imu_linAcc_x',
-                      'calcn_r_imu_linAcc_y', 'calcn_r_imu_linAcc_z']
-l_imu_column_names = ['calcn_l_imu_linAcc_x',
-                      'calcn_l_imu_linAcc_y', 'calcn_l_imu_linAcc_z']
+r_imu_column_names = ['talus_r_linAcc_x',
+                      'talus_r_linAcc_y', 'talus_r_linAcc_z']
+l_imu_column_names = ['talus_l_linAcc_x',
+                      'talus_l_linAcc_y', 'talus_l_linAcc_z']
 insole_column_names = ['R.CoP_x', 'L.CoP_x']
 
 force_labels = ['R.TotalForce', 'L.TotalForce']
 
-start = 200
-end = 500
+start = 0
+end = -1
 
 imu_df = pd.DataFrame({
-    # ** {'Time': time_imu[start:end]},
-    ** {'Time': list(range(imu_data.shape[0]))[start:end]},
+    ** {'Time': time_imu[start:end]},
+    # ** {'Time': list(range(imu_data.shape[0]))[start:end]},
     ** {label: imu_data[label][start:end] for label in r_imu_column_names + l_imu_column_names}
 
 })
 
 insole_df = pd.DataFrame({
-    # ** {'Time': time_insole[start:end]},
-    ** {'Time': list(range(imu_data.shape[0]))[start:end]},
+    ** {'Time': time_insole[start:end]},
+    # ** {'Time': list(range(imu_data.shape[0]))[start:end]},
     ** {label: insole_data[label][start:end] for label in insole_column_names},
     ** {label: insole_data[label][start:end] for label in force_labels}
 

@@ -26,11 +26,15 @@ using namespace OpenSim;
 using namespace OpenSimRT;
 using namespace SimTK;
 
-
 void run() {
     INIReader ini(INI_FILE);
     auto section = "LOWER_BODY_NGIMU_OFFLINE";
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
+    auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
+    auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
+    auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0);
+    auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
+    auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
     auto ngimuDataFile =
@@ -69,13 +73,13 @@ void run() {
     // calibrator
     IMUCalibrator clb(model, &driver, imuObservationOrder);
     clb.record(0.1);
-    clb.computeheadingRotation("pelvis", SimTK::CoordinateDirection(SimTK::ZAxis, 1));
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
-
 
     // visualizer
     BasicModelVisualizer visualizer(model);

@@ -25,6 +25,7 @@ template <int history, typename T> class CircularBuffer {
  public:
     CircularBuffer() {
         current = 0;
+        previous = history - 1;
         startOver = false;
         buffer.resize(history);
     }
@@ -43,15 +44,22 @@ template <int history, typename T> class CircularBuffer {
         {
             // lock
             std::lock_guard<std::mutex> lock(monitor);
+
             // update buffer
-            buffer[current] = value;
-            current++;
+            if (buffer[previous] != value) {
+                buffer[current] = value;
+                previous = current;
+                current++;
+                newValue = true;
+            }
+
             if (current == history) {
                 current = 0;
+                previous = history - 1;
                 startOver = true;
             }
-            newValue = true;
         }
+
         // notify after unlocking
         bufferNotEmpty.notify_one();
     }
@@ -63,7 +71,8 @@ template <int history, typename T> class CircularBuffer {
         // lock
         std::unique_lock<std::mutex> lock(monitor);
         // check if data are available to proceed
-        bufferNotEmpty.wait(lock, [&]() { return notEmpty(M) && newValue == true; });
+        bufferNotEmpty.wait(lock,
+                            [&]() { return notEmpty(M) && newValue == true; });
         newValue = false;
         // if not empty get data
         std::vector<T> result;
@@ -80,6 +89,7 @@ template <int history, typename T> class CircularBuffer {
 
  private:
     int current;
+    int previous;
     bool startOver;
     bool newValue; // Don't allow "get" twice
     std::vector<T> buffer;

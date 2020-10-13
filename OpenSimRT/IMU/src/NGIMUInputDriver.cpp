@@ -130,7 +130,8 @@ void NGIMUInputDriver::setupTransmitters(
         sendMessage(socket, "/rate/quaternion", 60);
         sendMessage(socket, "/rate/linear", 60);
         sendMessage(socket, "/rate/altitude", 60);
-        sendMessage(socket, "/ahrs/magnetometer", true);
+        sendMessage(socket, "/ahrs/magnetometer", false);
+        sendMessage(socket, "/wifi/synchronisation/enabled", false);
         sendMessage(socket, "/identify"); // bling!
     }
 }

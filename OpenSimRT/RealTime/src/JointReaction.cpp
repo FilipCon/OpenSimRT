@@ -3,7 +3,6 @@
 #include "Exception.h"
 #include "InverseDynamics.h"
 #include "OpenSimUtils.h"
-#include "Profile.h"
 
 #include <OpenSim/Simulation/Model/Actuator.h>
 #include <OpenSim/Simulation/Model/BodySet.h>
@@ -32,7 +31,6 @@ JointReaction::JointReaction(
 }
 
 JointReaction::Output JointReaction::solve(const JointReaction::Input& input) {
-    PROFILE_FUNCTION();
     if (model.getActuators().getSize() != input.fm.size()) {
         THROW_EXCEPTION("actuators and provided muscle forces are of different "
                         "dimensions");

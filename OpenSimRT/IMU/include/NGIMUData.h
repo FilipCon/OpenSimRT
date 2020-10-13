@@ -27,7 +27,7 @@ struct IMU_API NGIMUData {
         Acceleration acceleration; // in g
         Gyroscope gyroscope;       // in circ/sec
         Magnetometer magnetometer; // in uT
-        double barometer;       // in hPa
+        double barometer;          // in hPa
         osc::uint64 timeStamp;
     };
     struct LinearAcceleration {
@@ -47,5 +47,21 @@ struct IMU_API NGIMUData {
     SimTK::Vector asVector() const;
     void fromVector(const SimTK::Vector&);
 };
+
+inline bool operator==(const NGIMUData& lhs, const NGIMUData& rhs) {
+    bool cond = (lhs.sensors.timeStamp == rhs.sensors.timeStamp) &&
+                (lhs.quaternion.timeStamp == rhs.quaternion.timeStamp) &&
+                (lhs.altitude.timeStamp == rhs.altitude.timeStamp) &&
+                (lhs.linear.timeStamp == rhs.linear.timeStamp);
+    return (cond) ? true : false;
+}
+
+inline bool operator!=(const NGIMUData& lhs, const NGIMUData& rhs) {
+    bool cond = (lhs.sensors.timeStamp == rhs.sensors.timeStamp) &&
+                (lhs.quaternion.timeStamp == rhs.quaternion.timeStamp) &&
+                (lhs.altitude.timeStamp == rhs.altitude.timeStamp) &&
+                (lhs.linear.timeStamp == rhs.linear.timeStamp);
+    return (cond) ? false : true;
+}
 
 } // namespace OpenSimRT

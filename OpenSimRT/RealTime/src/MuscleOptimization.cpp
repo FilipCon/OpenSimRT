@@ -2,7 +2,6 @@
 
 #include "Exception.h"
 #include "OpenSimUtils.h"
-#include "Profile.h"
 
 #include <Common/TimeSeriesTable.h>
 #include <OpenSim/Actuators/CoordinateActuator.h>
@@ -60,7 +59,6 @@ MuscleOptimization::MuscleOptimization(
     target->p = optimizationParameters.objectiveExponent;
     target->build();
 
-
     optimizer = new SimTK::Optimizer(*target, optimizationParameters.algorithm);
     optimizer->setConvergenceTolerance(
             optimizationParameters.convergenceTolerance);
@@ -81,7 +79,6 @@ MuscleOptimization::MuscleOptimization(
 
 MuscleOptimization::Output
 MuscleOptimization::solve(const MuscleOptimization::Input& input) {
-    PROFILE_FUNCTION();
     try {
         target->prepareForOptimization(input);
         optimizer->optimize(parameterSeeds);
@@ -185,10 +182,8 @@ double TorqueBasedTargetLinearMuscle::setUpperBound(const OpenSim::Muscle* m) {
 
 void TorqueBasedTargetLinearMuscle::prepareForOptimization(
         const MuscleOptimization::Input& input) {
-    PROFILE_FUNCTION();
     tau = input.tau;
     R = calcMomentArm(input.q);
-
 }
 
 Vector

@@ -1,5 +1,4 @@
 #include "InverseKinematics.h"
-
 #include "Exception.h"
 #include "OpenSimUtils.h"
 
@@ -64,7 +63,7 @@ InverseKinematics::InverseKinematics(const OpenSim::Model& otherModel,
         }
         const auto& body = model.getBodySet()[bodyIndex];
         const auto& mobod = body.getMobilizedBody();
-        imuAssemblyConditions->addOSensor(task.name, mobod, task.orientation,
+        imuAssemblyConditions->addOSensor(task.name, mobod, task.orientation, // orientationInB = R_BS
                                           task.weight);
         imuObservationOrder.push_back(task.name);
     }

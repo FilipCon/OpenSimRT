@@ -37,59 +37,15 @@ using namespace OpenSim;
 using namespace SimTK;
 using namespace std;
 
-// // hamilton quaternion product
-// template <typename A, typename B>
-// static inline SimTK::Quaternion quaternProd(const A& a, const B& b) {
-//     SimTK::Quaternion c;
-//     c[0] = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
-//     c[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
-//     c[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
-//     c[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
-//     return c;
-// }
-
-// SimTK::Quaternion quatConjugate(const SimTK::Quaternion& q) {
-//     return SimTK::Quaternion(q[0], -q[1], -q[2], -q[3]);
-// }
-
-// // compute the projection of a point or vector on a arbitrary plane
-// static inline Vec3 projectionOnPlane(const Vec3& point, const Vec3&
-// planeOrigin,
-//                                      const Vec3& planeNormal) {
-//     return point - dot(point - planeOrigin, planeNormal) * planeNormal;
-// }
-
-// /**
-//    Decompose the rotation on to 2 parts.
-//    1. Twist - rotation around the "direction" vector
-//    2. Swing - rotation around axis that is perpendicular to "direction"
-//    vector The rotation can be composed back by rotation = swing * twist
-
-//    has singularity in case of swing_rotation close to 180 degrees rotation.
-//    if the input quaternion is of non-unit length, the outputs are non-unit as
-//    well otherwise, outputs are both unit
-// */
-// static inline Quaternion quaternDecomposition(const Quaternion& q,
-//                                               const Vec3& direction) {
-//     UnitVec3 ra(q[1], q[2], q[3]);                  // rotation axis
-//     auto p = SimTK::dot(ra, direction) * direction; //  project v1 on to v2
-//     auto twist = Quaternion(q[0], p[0], p[1], p[2]).normalize();
-//     // auto swing = Quaternion(quaternProd(q, twist));
-//     return twist;
-// }
-
 /******************************************************************************/
 IMUCalibrator::IMUCalibrator(const Model& otherModel,
                              InputDriver<NGIMUData>* const driver,
                              const vector<string>& observationOrder)
-    : m_driver(driver), model(*otherModel.clone()), R_heading(Rotation()) {
+        : m_driver(driver), model(*otherModel.clone()), R_heading(Rotation()),
+          R_GoGi(Rotation()) {
     // copy observation order list
     imuBodiesObservationOrder = std::vector<std::string>(
             observationOrder.begin(), observationOrder.end());
-
-    // set rotation from imu ground to opensim ground
-    R_GoGi = Rotation(-SimTK::Pi / 2, SimTK::YAxis) *
-             Rotation(-SimTK::Pi / 2, SimTK::XAxis);
 
     // initialize system
     state = model.initSystem();
@@ -99,68 +55,93 @@ IMUCalibrator::IMUCalibrator(const Model& otherModel,
     for (const auto& label : imuBodiesObservationOrder) {
         const PhysicalFrame* frame = nullptr;
         if ((frame = model.findComponent<PhysicalFrame>(label))) {
-            imuBodiesInGround[label] = frame->getTransformInGround(state).R();
+            imuBodiesInGround[label] =
+                    frame->getTransformInGround(state).R(); // R_GB
         }
     }
+}
+
+void IMUCalibrator::setGroundOrientationSeq(const double& xDegrees,
+                                            const double& yDegrees,
+                                            const double& zDegrees) {
+    auto xRad = SimTK::convertDegreesToRadians(xDegrees);
+    auto yRad = SimTK::convertDegreesToRadians(yDegrees);
+    auto zRad = SimTK::convertDegreesToRadians(zDegrees);
+
+    R_GoGi = Rotation(SimTK::BodyOrSpaceType::SpaceRotationSequence, xRad,
+                      SimTK::XAxis, yRad, SimTK::YAxis, zRad, SimTK::ZAxis);
 }
 
 void IMUCalibrator::computeheadingRotation(
-        const std::string& baseImuName,
-        const SimTK::CoordinateDirection baseHeadingDirection) {
-
-    // compute heading vector
-    auto headingRotationVec =
-            computeHeadingCorrection(baseImuName, baseHeadingDirection);
-
-    // set heading rotation
-    R_heading =
-            Rotation(SimTK::BodyOrSpaceType::SpaceRotationSequence,
-                     headingRotationVec[0], SimTK::XAxis, headingRotationVec[1],
-                     SimTK::YAxis, headingRotationVec[2], SimTK::ZAxis);
-}
-
-SimTK::Vec3 IMUCalibrator::computeHeadingCorrection(
-        const std::string& baseImuName,
-        const SimTK::CoordinateDirection baseHeadingDirection) {
-    auto baseBodyIndex = std::distance(
-            imuBodiesObservationOrder.begin(),
-            std::find(imuBodiesObservationOrder.begin(),
-                      imuBodiesObservationOrder.end(), baseImuName));
-
-    const auto& q0 = initIMUData[baseBodyIndex].quaternion.q;
-    const auto base_R = R_GoGi * ~Rotation(q0);
-
-    UnitVec3 baseSegmentXheading = base_R(baseHeadingDirection.getAxis());
-    if (baseHeadingDirection.getDirection() < 0)
-        baseSegmentXheading = baseSegmentXheading.negate();
-    bool baseFrameFound = false;
-
-    const Frame* baseFrame = nullptr;
-    for (int j = 0; j < model.getNumJoints() && !baseFrameFound; ++j) {
-        auto& joint = model.getJointSet().get(j);
-
-        // look for body whose parent is ground
-        if (joint.getParentFrame().findBaseFrame() == model.getGround()) {
-            baseFrame = &(joint.getChildFrame().findBaseFrame());
-            baseFrameFound = true;
-            break;
+        const std::string& baseImuName, const std::string& imuDirectionAxis) {
+    if (!imuDirectionAxis.empty() && !baseImuName.empty()) {
+        // set coordinate direction based on given imu direction axis given as
+        // string
+        std::string imuAxis = IO::Lowercase(imuDirectionAxis);
+        SimTK::CoordinateDirection baseHeadingDirection(SimTK::ZAxis);
+        int direction = 1;
+        if (imuAxis.front() == '-') direction = -1;
+        const char& back = imuAxis.back();
+        if (back == 'x')
+            baseHeadingDirection =
+                    SimTK::CoordinateDirection(SimTK::XAxis, direction);
+        else if (back == 'y')
+            baseHeadingDirection =
+                    SimTK::CoordinateDirection(SimTK::YAxis, direction);
+        else if (back == 'z')
+            baseHeadingDirection =
+                    SimTK::CoordinateDirection(SimTK::ZAxis, direction);
+        else { // Throw, invalid specification
+            THROW_EXCEPTION("Invalid specification of heading axis '" +
+                            imuAxis + "' found.");
         }
+
+        // find base imu body index in observation order
+        auto baseBodyIndex = std::distance(
+                imuBodiesObservationOrder.begin(),
+                std::find(imuBodiesObservationOrder.begin(),
+                          imuBodiesObservationOrder.end(), baseImuName));
+
+        // get initial measurement of base imu
+        const auto& q0 = initIMUData[baseBodyIndex].quaternion.q;
+        const auto base_R = R_GoGi * ~Rotation(q0);
+
+        // get initial direction from the imu measurement (the axis looking
+        // front)
+        UnitVec3 baseSegmentXheading = base_R(baseHeadingDirection.getAxis());
+        if (baseHeadingDirection.getDirection() < 0)
+            baseSegmentXheading = baseSegmentXheading.negate();
+
+        // get frame of imu body
+        const PhysicalFrame* baseFrame = nullptr;
+        if (!(baseFrame = model.findComponent<PhysicalFrame>(baseImuName))) {
+            THROW_EXCEPTION(
+                    "Frame of given body name does not exist in the model.");
+        }
+
+        // express unit x axis of local body frame to ground frame
+        Vec3 baseFrameX = UnitVec3(1, 0, 0);
+        const SimTK::Transform& baseXForm =
+                baseFrame->getTransformInGround(state);
+        Vec3 baseFrameXInGround = baseXForm.xformFrameVecToBase(baseFrameX);
+
+        // compute the angular difference between the model heading and imu
+        // heading
+        auto angularDifference =
+                acos(~baseSegmentXheading * baseFrameXInGround);
+
+        // compute sign
+        auto xproduct = baseFrameXInGround % baseSegmentXheading;
+        if (xproduct.get(1) > 0) { angularDifference *= -1; }
+
+        // set heading rotation (rotation about Y axis)
+        R_heading = Rotation(angularDifference, SimTK::YAxis);
+
+    } else {
+        cout << "No heading correction is applied. Heading rotation is set to "
+                "default"
+             << endl;
     }
-
-    OPENSIM_THROW_IF(!baseFrameFound, OpenSim::Exception,
-                     "No base segment was found");
-
-    Vec3 baseFrameX = UnitVec3(1, 0, 0);
-    const SimTK::Transform& baseXForm = baseFrame->getTransformInGround(state);
-    Vec3 baseFrameXInGround = baseXForm.xformFrameVecToBase(baseFrameX);
-
-    auto angularDifference = acos(~baseSegmentXheading * baseFrameXInGround);
-
-    // compute sign
-    auto xproduct = baseFrameXInGround % baseSegmentXheading;
-    if (xproduct.get(1) > 0) { angularDifference *= -1; }
-
-    return Vec3(0, angularDifference, 0);
 }
 
 void IMUCalibrator::calibrateIMUTasks(
@@ -170,9 +151,9 @@ void IMUCalibrator::calibrateIMUTasks(
         const auto R0 = R_heading * R_GoGi * ~Rotation(q0);
 
         const auto& bodyName = imuTasks[i].body;
-        const auto R_FB = ~imuBodiesInGround[bodyName] * R0;
+        const auto R_BS = ~imuBodiesInGround[bodyName] * R0; // ~R_GB * R_GO
 
-        imuTasks[i].orientation = std::move(R_FB);
+        imuTasks[i].orientation = std::move(R_BS);
     }
 }
 

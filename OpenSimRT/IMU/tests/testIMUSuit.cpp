@@ -3,7 +3,6 @@
 #include "InverseKinematics.h"
 #include "NGIMUInputDriver.h"
 #include "OpenSimUtils.h"
-
 #include "Settings.h"
 #include "Simulation.h"
 #include "Visualization.h"
@@ -37,6 +36,12 @@ void run() {
     auto LISTEN_PORTS =
             ini.getVector(section, "IMU_LISTEN_PORTS", vector<int>());
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
+    auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
+    auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
+    auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0);
+    auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
+    auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
@@ -76,7 +81,7 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-        // driver
+    // driver
     NGIMUInputDriver driver;
     driver.setupInput(imuObservationOrder,
                       vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
@@ -88,7 +93,8 @@ void run() {
     // calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.record(3.0); // record for 3 seconds
-    clb.computeheadingRotation("pelvis", SimTK::CoordinateDirection(SimTK::ZAxis, 1));
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
@@ -104,8 +110,8 @@ void run() {
             auto imuDataFrame = driver.getFrame();
 
             // solve ik
-            auto pose = ik.solve(
-                clb.transform(imuDataFrame, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
+            auto pose = ik.solve(clb.transform(
+                imuDataFrame, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
 
             // visualize
             visualizer.update(pose.q);
@@ -123,8 +129,8 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        CSVFileAdapter::write(
-                imuLogger, subjectDir + "experimental_data/ngimu_data.csv");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
     }
 }
 

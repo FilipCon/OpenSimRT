@@ -1,6 +1,5 @@
 #include "IMUCalibrator.h"
 #include "INIReader.h"
-#include "InverseKinematics.h"
 #include "MoticonReceiver.h"
 #include "NGIMUInputDriver.h"
 #include "OpenSimUtils.h"
@@ -30,6 +29,13 @@ using namespace OpenSim;
 using namespace OpenSimRT;
 using namespace SimTK;
 
+#define TIMESTAMP_NOW()                                                        \
+    static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(  \
+                                std::chrono::high_resolution_clock::now()      \
+                                        .time_since_epoch())                   \
+                                .count()) /                                    \
+            1000000000
+
 void run() {
     INIReader ini(INI_FILE);
     auto section = "LOWER_BODY_NGIMU";
@@ -42,17 +48,17 @@ void run() {
     auto INSOLES_PORT = ini.getInteger(section, "INSOLE_LISTEN_PORT", 0);
     auto INSOLE_SIZE = ini.getInteger(section, "INSOLE_SIZE", 0);
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
+    auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
+    auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
+    auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0);
+    auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
+    auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
     // initial timetag (as decimal) of simulation
-    const auto initTime =
-            static_cast<double>(
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(
-                            std::chrono::high_resolution_clock::now()
-                                    .time_since_epoch())
-                            .count()) /
-            1000000000;
+    const auto initTime = TIMESTAMP_NOW();
 
     // setup model
     Model model(modelFile);
@@ -98,7 +104,8 @@ void run() {
     // calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.record(3); // record for 3 seconds
-    clb.computeheadingRotation("pelvis", SimTK::CoordinateDirection(SimTK::ZAxis, 1));
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
@@ -173,8 +180,8 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        CSVFileAdapter::write(
-                imuLogger, subjectDir + "experimental_data/ngimu_data.csv");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
         CSVFileAdapter::write(mtLogger,
                               subjectDir + "experimental_data/moticon.csv");
         // CSVFileAdapter::write(avp,

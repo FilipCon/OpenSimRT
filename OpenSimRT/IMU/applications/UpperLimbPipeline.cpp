@@ -63,7 +63,7 @@ void run() {
     // imu calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.record(3); // record for 3 seconds
-    clb.computeheadingRotation("torso", SimTK::CoordinateDirection(SimTK::ZAxis, 1));
+    clb.computeheadingRotation("torso", "z");
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)

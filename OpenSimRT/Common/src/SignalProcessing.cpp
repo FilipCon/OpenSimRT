@@ -1,7 +1,6 @@
 #include "SignalProcessing.h"
 
 #include "Exception.h"
-#include "Profile.h"
 #include "Utils.h"
 
 #include <SimTKcommon/Scalar.h>
@@ -202,7 +201,6 @@ LowPassSmoothFilterTS::~LowPassSmoothFilterTS() {
 }
 
 void LowPassSmoothFilterTS::updState(LowPassSmoothFilterTS::Input&& input) {
-    PROFILE_FUNCTION();
     {
         // lock
         lock_guard<mutex> locker(monitor);
@@ -225,8 +223,6 @@ void LowPassSmoothFilterTS::updState(LowPassSmoothFilterTS::Input&& input) {
 }
 
 LowPassSmoothFilterTS::Output LowPassSmoothFilterTS::filter() {
-    PROFILE_FUNCTION();
-
     std::unique_lock<std::mutex> lock(monitor);
     cond.wait(lock, [&]() { return dataMatrixReady && newDataReady; });
 
@@ -526,15 +522,10 @@ Vector NumericalIntegrator::integrate(const SimTK::Vector& xn,
 
 /******************************************************************************/
 
-KalmanFilter::KalmanFilter(
-        const Matrix& A,
-        const Matrix& C,
-        const Matrix& Q,
-        const Matrix& R,
-        const Matrix& P,
-        const int& p)
-        : A(A), C(C), Q(Q), R(R), P0(P),
-          m(C.nrow()), n(A.ncol()), p(p), initialized(false) {
+KalmanFilter::KalmanFilter(const Matrix& A, const Matrix& C, const Matrix& Q,
+                           const Matrix& R, const Matrix& P, const int& p)
+        : A(A), C(C), Q(Q), R(R), P0(P), m(C.nrow()), n(A.ncol()), p(p),
+          initialized(false) {
     x_hat.resize(n, p);
     x_hat_new.resize(n, p);
     I.resize(n, n) = 1;
@@ -556,9 +547,7 @@ void KalmanFilter::init() {
 }
 
 Vector KalmanFilter::filter(const Vector& y) {
-
-    if (!initialized)
-        throw std::runtime_error("Filter is not initialized!");
+    if (!initialized) throw std::runtime_error("Filter is not initialized!");
 
     x_hat_new = A * x_hat;
     P = A * P * A.transpose() + Q;
@@ -570,7 +559,6 @@ Vector KalmanFilter::filter(const Vector& y) {
 }
 
 Vector KalmanFilter::filter(const Vector& y, const Matrix A) {
-
     this->A = A;
     return filter(y);
 }
