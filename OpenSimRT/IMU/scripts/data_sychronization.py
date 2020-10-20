@@ -1,12 +1,12 @@
 ##
 import os
 import pandas as pd
-import numpy as np
+# import numpy as np
 
-import opensim as osim
+# import opensim as osim
 import matplotlib.pyplot as plt
 
-from matplotlib.backends.backend_pdf import PdfPages
+# from matplotlib.backends.backend_pdf import PdfPages
 
 # data
 subject_dir = os.path.abspath('../../../data/gait1992/experimental_data')
@@ -32,7 +32,8 @@ end = -1
 imu_df = pd.DataFrame({
     ** {'Time': time_imu[start:end]},
     # ** {'Time': list(range(imu_data.shape[0]))[start:end]},
-    ** {label: imu_data[label][start:end] for label in r_imu_column_names + l_imu_column_names}
+    ** {label: imu_data[label][start:end] for label in r_imu_column_names + \
+        l_imu_column_names}
 
 })
 

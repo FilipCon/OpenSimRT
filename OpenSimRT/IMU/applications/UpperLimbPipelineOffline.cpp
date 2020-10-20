@@ -6,6 +6,7 @@
 #include "Settings.h"
 #include "Visualization.h"
 
+#include <OpenSim/Simulation/SimbodyEngine/SimbodyEngine.h>
 #include <Common/TimeSeriesTable.h>
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <SimTKcommon/SmallMatrix.h>
@@ -28,13 +29,14 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    auto section = "LOWER_BODY_NGIMU_OFFLINE";
+    auto section = "UPPER_LIMB_NGIMU_OFFLINE";
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
     auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
     auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
-    auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0);
-    auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
-    auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
+    auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0.0);
+    auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0.0);
+    auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0.0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
     auto ngimuDataFile =
@@ -42,24 +44,8 @@ void run() {
 
     // setup model
     Model model(modelFile);
-
-    // add marker to pelvis center to track model position from imus
-    auto pelvisMarker =
-            Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
-    model.addMarker(&pelvisMarker);
-    model.finalizeConnections();
-
     State state = model.initSystem();
     model.realizePosition(state);
-    auto height = model.getBodySet().get("pelvis").findStationLocationInGround(
-            state, Vec3(0));
-
-    // marker tasks
-    vector<InverseKinematics::MarkerTask> markerTasks;
-    vector<string> markerObservationOrder;
-    InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"PelvisCenter"}, markerTasks,
-            markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -72,13 +58,14 @@ void run() {
 
     // calibrator
     IMUCalibrator clb(model, &driver, imuObservationOrder);
-    clb.recordNumOfSamples(5);
+    clb.recordNumOfSamples(1);
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
     clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
-    InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
+    InverseKinematics ik(model, vector<InverseKinematics::MarkerTask>{},
+                         imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
 
     // visualizer
@@ -90,8 +77,8 @@ void run() {
             auto imuDataFrame = driver.getFrame();
 
             // solve ik
-            auto pose = ik.solve(clb.transform(
-                    imuDataFrame, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
+            auto pose = ik.solve(
+                    clb.transform(imuDataFrame, vector<SimTK::Vec3>{}));
 
             // visualize
             visualizer.update(pose.q);
@@ -100,9 +87,9 @@ void run() {
             qLogger.appendRow(pose.t, ~pose.q);
 
             // dummy delay to simulate real time
-            std::this_thread::sleep_for(std::chrono::milliseconds(13));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(13));
         }
-    } catch (std::exception& e) { cout << e.what() << endl; }
+    } catch (std::exception& e) { cout << e.what() << endl;}
 
     // store results
     STOFileAdapter::write(qLogger,

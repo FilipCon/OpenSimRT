@@ -11,6 +11,7 @@
 #include "internal/CommonExports.h"
 
 #include <SimTKcommon/internal/BigMatrix.h>
+#include <SimTKcommon/internal/negator.h>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -87,4 +88,10 @@ void vectorToDouble(const SimTK::Vector_<T>& source, double* destination) {
 
 } // namespace OpenSimRT
 
+template <typename T> bool isVectorFinite(const SimTK::Vector_<T>& v) {
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (!SimTK::isFinite(v[i])) return false;
+    }
+    return true;
+}
 #endif

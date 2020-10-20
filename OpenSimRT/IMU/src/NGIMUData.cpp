@@ -10,11 +10,6 @@
 using namespace OpenSimRT;
 using namespace SimTK;
 
-// // operator overload
-// std::ostream& operator<<(std::ostream& os, const NGIMUData::Quaternion& q) {
-//     return os << q.q1 << " " << q.q2 << " " << q.q3 << " " << q.q4;
-// }
-
 Vector NGIMUData::asVector() const {
     double v[this->size()];
     int i = 0;
@@ -38,11 +33,11 @@ Vector NGIMUData::asVector() const {
 void NGIMUData::fromVector(const Vector& v) {
     int i = 0;
     this->quaternion.q = SimTK::Quaternion(v[0], v[1], v[2], v[3]);
-    this->sensors.acceleration.a = Vec3(v[4], v[5], v[6]);
-    this->sensors.gyroscope.g = Vec3(v[7], v[8], v[9]);
-    this->sensors.magnetometer.m = Vec3(v[10], v[11], v[12]);
+    this->sensors.acceleration.a = Vec3(&v[4]);
+    this->sensors.gyroscope.g = Vec3(&v[7]);
+    this->sensors.magnetometer.m = Vec3(&v[10]);
     this->sensors.barometer = v[13];
-    this->linear.a = v[14], v[15], v[16];
+    this->linear.a = Vec3(&v[14]);
     this->altitude.x = v[17];
 }
 

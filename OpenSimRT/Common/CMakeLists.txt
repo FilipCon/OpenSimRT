@@ -5,6 +5,7 @@ file(GLOB sources src/*.cpp)
 file(GLOB tests
   # tests/TestCircularBuffer.cpp
   # tests/TestLowPassSmoothFilter.cpp
+  tests/TestSyncManager.cpp
   )
 
 # dependencies

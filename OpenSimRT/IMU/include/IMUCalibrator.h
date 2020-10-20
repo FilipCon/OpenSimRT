@@ -27,7 +27,9 @@ class IMU_API IMUCalibrator {
 
     void setGroundOrientationSeq(const double& xDegrees, const double& yDegrees,
                                  const double& zDegrees);
-    void record(const double& timeout);
+    void recordTime(const double& timeout);
+
+    void recordNumOfSamples(const size_t& numSamples);
 
     void computeheadingRotation(const std::string& baseImuName,
                                 const std::string& imuDirectionAxis);

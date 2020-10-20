@@ -62,7 +62,7 @@ void run() {
 
     // imu calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
-    clb.record(3); // record for 3 seconds
+    clb.recordTime(3); // record for 3 seconds
     clb.computeheadingRotation("torso", "z");
     clb.calibrateIMUTasks(imuTasks);
 

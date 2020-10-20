@@ -25,50 +25,10 @@ SizeFun insoleSizeSelector(const int& size) {
         THROW_EXCEPTION("Input Size is invalid");
 }
 
+/*********************************************************************/
+
 void MoticonReceiver::setInsoleSize(const int& x) {
     size = insoleSizeSelector(x)();
-}
-
-std::ostream& operator<<(std::ostream& os,
-                         const MoticonReceiver::MoticonReceivedBundle& m) {
-    os << "Time: " << m.timestamp << " "
-       << "L.Acceleration: " << m.left.acceleration << " "
-       << "L.AngularRate: " << m.left.angularRate << " "
-       << "L.CoP: " << m.left.cop << " "
-       << "L.Pressure: " << m.left.pressure << " "
-       << "L.TotalForce: " << m.left.totalForce << " "
-       << "R.Acceleration: " << m.right.acceleration << " "
-       << "R.AngularRate: " << m.right.angularRate << " "
-       << "R.CoP: " << m.right.cop << " "
-       << "R.Pressure: " << m.right.pressure << " "
-       << "R.TotalForce: " << m.right.totalForce;
-    return os;
-}
-
-Vector MoticonReceiver::MoticonReceivedBundle::asVector() const {
-    double v[this->size()];
-    int i = 0;
-    vecToDouble(left.acceleration, v + i);
-    i += 3;
-    vecToDouble(left.angularRate, v + i);
-    i += 3;
-    vecToDouble(left.cop, v + i);
-    i += 2;
-    vecToDouble(left.pressure, v + i);
-    i += 16;
-    std::memcpy(v + i, &left.totalForce, sizeof(double));
-    i += 1;
-    vecToDouble(right.acceleration, v + i);
-    i += 3;
-    vecToDouble(right.angularRate, v + i);
-    i += 3;
-    vecToDouble(right.cop, v + i);
-    i += 2;
-    vecToDouble(right.pressure, v + i);
-    i += 16;
-    std::memcpy(v + i, &right.totalForce, sizeof(double));
-    i += 1;
-    return std::move(SimTK::Vector_<double>(this->size(), v, true));
 }
 
 MoticonReceiver::MoticonReceiver(const string& ip, const int& port) {
@@ -130,7 +90,7 @@ OpenSim::TimeSeriesTable MoticonReceiver::initializeLogger() {
     return q;
 }
 
-MoticonReceiver::MoticonReceivedBundle MoticonReceiver::receiveData() {
+MoticonReceivedBundle MoticonReceiver::receiveData() {
     MoticonReceivedBundle data;
     auto vec = splitInputStream(getStream(), " ");
     double* arr = &vec[0];

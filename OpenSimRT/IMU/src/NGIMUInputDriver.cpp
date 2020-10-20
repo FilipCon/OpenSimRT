@@ -1,6 +1,7 @@
 #include "NGIMUInputDriver.h"
 
 #include "InverseKinematics.h"
+#include "NGIMUData.h"
 #include "NGIMUListener.h"
 #include "OpenSimUtils.h"
 #include "ip/UdpSocket.h"
@@ -186,6 +187,16 @@ SimTK::Vector NGIMUInputDriver::asVector(const IMUDataFrame& imuDataFrame) {
         i += n;
     }
     return vec;
+}
+
+std::vector<NGIMUData> NGIMUInputDriver::fromVector(const SimTK::Vector& v) {
+    std::vector<NGIMUData> frame;
+    for (int i = 0; i < v.size(); i += NGIMUData::size()) {
+        NGIMUData data;
+        data.fromVector(v(i, NGIMUData::size()));
+        frame.push_back(data);
+    }
+    return frame;
 }
 
 OpenSim::TimeSeriesTable NGIMUInputDriver::initializeLogger() {

@@ -37,6 +37,22 @@ using namespace OpenSim;
 using namespace SimTK;
 using namespace std;
 
+// hamilton quaternion product
+static inline SimTK::Quaternion operator*(const SimTK::Quaternion& a,
+                                          const SimTK::Quaternion& b) {
+    SimTK::Quaternion c;
+    c[0] = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
+    c[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
+    c[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
+    c[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
+    return c;
+}
+
+// overwrite SImTK operator~ for quaternions, to compute the conjugate
+static inline SimTK::Quaternion operator~(const SimTK::Quaternion& q) {
+    return SimTK::Quaternion(q[0], -q[1], -q[2], -q[3]);
+}
+
 /******************************************************************************/
 IMUCalibrator::IMUCalibrator(const Model& otherModel,
                              InputDriver<NGIMUData>* const driver,
@@ -179,7 +195,17 @@ IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
     return input;
 }
 
-void IMUCalibrator::record(const double& timeout) {
+void IMUCalibrator::recordNumOfSamples(const size_t& numSamples) {
+    cout << "Recording Static Pose..." << endl;
+    size_t i;
+    while (i < numSamples) {
+        // get frame measurements
+        quatTable.push_back(m_driver->getFrame().second);
+        ++i;
+    }
+    computeAvgStaticPose();
+}
+void IMUCalibrator::recordTime(const double& timeout) {
     cout << "Recording Static Pose..." << endl;
     const auto start = chrono::steady_clock::now();
     while (std::chrono::duration_cast<chrono::seconds>(

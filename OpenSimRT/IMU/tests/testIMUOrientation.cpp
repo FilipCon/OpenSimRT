@@ -66,7 +66,7 @@ void run() {
     // start listening
     thread listen(&NGIMUInputDriver::startListening, &driver);
 
-    clb.record(0.1);
+    clb.recordTime(0.1);
 
     // visualizer
     BasicModelVisualizer visualizer(model);
