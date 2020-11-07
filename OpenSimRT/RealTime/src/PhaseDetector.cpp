@@ -40,9 +40,9 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     // contact half-space
     auto platformContact = new ContactHalfSpace();
     platformContact->setName("PlatformContact");
-    platformContact->setLocation(Vec3(0));
-    platformContact->setOrientation(Vec3(0.0, 0.0, -Pi / 2.0));
-    platformContact->setBody(*platform);
+    platformContact->set_location(Vec3(0));
+    platformContact->set_orientation(Vec3(0.0, 0.0, -Pi / 2.0));
+    platformContact->setFrame(*platform);
     model.addContactGeometry(platformContact);
 
     // contact spheres
@@ -50,14 +50,14 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     auto leftHeelContact = new ContactSphere();
     auto rightToeContact = new ContactSphere();
     auto leftToeContact = new ContactSphere();
-    rightHeelContact->setLocation(Vec3(0.012, -0.0015, -0.005));
-    leftHeelContact->setLocation(Vec3(0.012, -0.0015, 0.005));
-    rightToeContact->setLocation(Vec3(0.055, 0.01, -0.01));
-    leftToeContact->setLocation(Vec3(0.055, 0.01, 0.01));
-    rightHeelContact->setBody(model.getBodySet().get("calcn_r"));
-    leftHeelContact->setBody(model.getBodySet().get("calcn_l"));
-    rightToeContact->setBody(model.getBodySet().get("toes_r"));
-    leftToeContact->setBody(model.getBodySet().get("toes_l"));
+    rightHeelContact->set_location(Vec3(0.012, -0.0015, -0.005));
+    leftHeelContact->set_location(Vec3(0.012, -0.0015, 0.005));
+    rightToeContact->set_location(Vec3(0.055, 0.01, -0.01));
+    leftToeContact->set_location(Vec3(0.055, 0.01, 0.01));
+    rightHeelContact->setFrame(model.getBodySet().get("calcn_r"));
+    leftHeelContact->setFrame(model.getBodySet().get("calcn_l"));
+    rightToeContact->setFrame(model.getBodySet().get("toes_r"));
+    leftToeContact->setFrame(model.getBodySet().get("toes_l"));
     rightHeelContact->setRadius(0.01);
     leftHeelContact->setRadius(0.01);
     rightToeContact->setRadius(0.01);
@@ -97,8 +97,8 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     leftContactForce = new OpenSim::HuntCrossleyForce(leftContactParams);
     rightContactForce->setName("RightContactForce");
     leftContactForce->setName("LeftContactForce");
-    model.addForce(rightContactForce);
-    model.addForce(leftContactForce);
+    model.addForce(rightContactForce.get());
+    model.addForce(leftContactForce.get());
 
     // initialize system
     state = model.initSystem();

@@ -17,16 +17,12 @@ namespace OpenSimRT {
 template <typename T> class ListenerAdapter;
 
 /*******************************************************************************/
-    template <typename T>
-class IMU_API Driver {
-
-    };
 
 /**
  * @brief Base class for different manager implementations.
  *
  */
-    template <typename T> class IMU_API InputDriver : Driver<T>{
+template <typename T> class IMU_API InputDriver {
     friend class ListenerAdapter<T>;
 
  public:
@@ -37,7 +33,7 @@ class IMU_API Driver {
     virtual void stopListening() = 0;
 
     // obtain observations from IMU data.
-    virtual std::pair<double, std::vector<T>> getFrame() = 0;
+    virtual std::vector<T> getFrame() = 0;
 
  protected:
     InputDriver() noexcept {};

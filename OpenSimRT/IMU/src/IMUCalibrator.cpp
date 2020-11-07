@@ -174,8 +174,8 @@ void IMUCalibrator::calibrateIMUTasks(
 }
 
 InverseKinematics::Input
-IMUCalibrator::transform(const NGIMUInputDriver::IMUDataFrame& imuData,
-                         const vector<Vec3>& markerData) {
+IMUCalibrator::transform(const std::pair<double, std::vector<NGIMUData>>& imuData,
+                         const SimTK::Array_<Vec3>& markerData) {
     InverseKinematics::Input input;
 
     // time
@@ -200,7 +200,7 @@ void IMUCalibrator::recordNumOfSamples(const size_t& numSamples) {
     size_t i;
     while (i < numSamples) {
         // get frame measurements
-        quatTable.push_back(m_driver->getFrame().second);
+        quatTable.push_back(m_driver->getFrame());
         ++i;
     }
     computeAvgStaticPose();
@@ -212,7 +212,7 @@ void IMUCalibrator::recordTime(const double& timeout) {
                    chrono::steady_clock::now() - start)
                    .count() < timeout) {
         // get frame measurements
-        quatTable.push_back(m_driver->getFrame().second);
+        quatTable.push_back(m_driver->getFrame());
     }
     computeAvgStaticPose();
 }

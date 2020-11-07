@@ -1,4 +1,5 @@
 #include "InverseKinematics.h"
+
 #include "Exception.h"
 #include "OpenSimUtils.h"
 
@@ -11,6 +12,7 @@
 #include <iterator>
 #include <simbody/internal/MobilizedBody.h>
 #include <simbody/internal/common.h>
+#include <vector>
 
 using OpenSim::Model, OpenSim::MarkerData, OpenSim::Units, OpenSim::IKTaskSet,
         OpenSim::IKCoordinateTask, OpenSim::TimeSeriesTable;
@@ -63,8 +65,9 @@ InverseKinematics::InverseKinematics(const OpenSim::Model& otherModel,
         }
         const auto& body = model.getBodySet()[bodyIndex];
         const auto& mobod = body.getMobilizedBody();
-        imuAssemblyConditions->addOSensor(task.name, mobod, task.orientation, // orientationInB = R_BS
-                                          task.weight);
+        imuAssemblyConditions->addOSensor(
+                task.name, mobod, task.orientation, // orientationInB = R_BS
+                task.weight);
         imuObservationOrder.push_back(task.name);
     }
     imuAssemblyConditions->defineObservationOrder(imuObservationOrder);
@@ -224,6 +227,21 @@ InverseKinematics::Input InverseKinematics::getFrameFromMarkerData(
                     BodyOrSpaceType::SpaceRotationSequence, vec[0],
                     SimTK::XAxis, vec[1], SimTK::YAxis, vec[2], SimTK::ZAxis));
         }
+    }
+    return input;
+}
+
+InverseKinematics::Input InverseKinematics::getFrameFromTimeSeriesTable(
+        int i, const OpenSim::TimeSeriesTable_<SimTK::Vec3>& table,
+        const std::vector<std::string>& observationOrder, bool isIMU) {
+    // extract based on observation order
+    InverseKinematics::Input input;
+    auto frame = table.getRowAtIndex(i);
+    input.t = table.getIndependentColumn()[i];
+    for (auto name : observationOrder) {
+        int index = table.getColumnIndex(name);
+        auto vec = frame[index];
+        input.markerObservations.push_back(vec);
     }
     return input;
 }

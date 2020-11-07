@@ -47,8 +47,8 @@ Vec3 PositionTracker::computePosition(
 
     const auto& t = data.first;
     // const auto& acc = data.second[pelvisIndex].sensors.acceleration;
-    const auto& linAcc = data.second[pelvisIndex].linear.a;
-    const auto& altitude = data.second[pelvisIndex].altitude.x;
+    const auto& linAcc = data.second[pelvisIndex].linear.acceleration;
+    const auto& altitude = data.second[pelvisIndex].altitude.measurement;
 
     // LP filter acceleration
     const auto a_f = accelerationLPFilter->filter(

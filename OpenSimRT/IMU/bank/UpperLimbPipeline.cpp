@@ -1,22 +1,22 @@
 #include "IMUCalibrator.h"
 #include "INIReader.h"
 #include "InverseKinematics.h"
-#include "NGIMUInputFromFileDriver.h"
+#include "NGIMUInputDriver.h"
 #include "OpenSimUtils.h"
+#include "PositionTracker.h"
 #include "Settings.h"
+#include "Simulation.h"
 #include "Visualization.h"
 
 #include <Common/TimeSeriesTable.h>
+#include <OpenSim/Common/CSVFileAdapter.h>
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
-#include <SimTKcommon/internal/CoordinateAxis.h>
 #include <SimTKcommon/internal/State.h>
 #include <Simulation/Model/Model.h>
-#include <algorithm>
-#include <chrono>
-#include <cmath>
 #include <exception>
+#include <future>
 #include <iostream>
 #include <simbody/internal/Visualizer.h>
 #include <thread>
@@ -28,38 +28,30 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    auto section = "LOWER_BODY_NGIMU_OFFLINE";
+    auto section = "UPPER_LIMB_NGIMU";
+    auto IMU_IP = ini.getVector(section, "IMU_IP", vector<string>());
+    auto LISTEN_IP = ini.getString(section, "LISTEN_IP", "0.0.0.0");
+    auto SEND_PORTS = ini.getVector(section, "SEND_PORTS", vector<int>());
+    auto LISTEN_PORTS = ini.getVector(section, "LISTEN_PORTS", vector<int>());
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
+    auto markerNames = ini.getVector(section, "MARKER_NAMES", vector<string>());
     auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
     auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
     auto xGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_X", 0);
     auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
     auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
-    auto ngimuDataFile =
-            subjectDir + ini.getString(section, "NGIMU_DATA_CSV", "");
 
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center to track model position from imus
-    auto pelvisMarker =
-            Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
-    model.addMarker(&pelvisMarker);
-    model.finalizeConnections();
-
-    State state = model.initSystem();
-    model.realizePosition(state);
-    auto height = model.getBodySet().get("pelvis").findStationLocationInGround(
-            state, Vec3(0));
-
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
-    InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"PelvisCenter"}, markerTasks,
-            markerObservationOrder);
+    // InverseKinematics::createMarkerTasksFromMarkerNames(
+    //         model, markerNames, markerTasks, markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -67,12 +59,20 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-    // ngimu input data driver from file
-    NGIMUInputFromFileDriver driver(ngimuDataFile);
+    // imu driver
+    NGIMUInputDriver driver;
+    driver.setupInput(imuObservationOrder,
+                      vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
+                      LISTEN_PORTS);
+    driver.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
+    auto imuLogger = driver.initializeLogger();
 
-    // calibrator
-    IMUCalibrator clb(model, &driver, imuObservationOrder);
-    clb.recordNumOfSamples(5);
+    // start listening
+    thread listen(&NGIMUInputDriver::startListening, &driver);
+
+    // imu calibrator
+    IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
+    clb.recordTime(3); // record for 3 seconds
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
     clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
@@ -84,29 +84,42 @@ void run() {
     // visualizer
     BasicModelVisualizer visualizer(model);
 
+    // // initial timetag (as decimal) of simulation
+    // auto initTime =
+    //         static_cast<double>(
+    //                 std::chrono::duration_cast<std::chrono::nanoseconds>(
+    //                         std::chrono::high_resolution_clock::now()
+    //                                 .time_since_epoch())
+    //                         .count()) /
+    //         1000000000;
+
     try { // main loop
         while (true) {
             // get input from imus
             auto imuDataFrame = driver.getFrame();
 
             // solve ik
-            auto pose = ik.solve(clb.transform(
-                    imuDataFrame, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
+            auto pose = ik.solve(clb.transform(imuDataFrame, {}));
 
             // visualize
             visualizer.update(pose.q);
 
             // record
+            imuLogger.appendRow(imuDataFrame.first,
+                                ~driver.asVector(imuDataFrame));
             qLogger.appendRow(pose.t, ~pose.q);
-
-            // dummy delay to simulate real time
-            std::this_thread::sleep_for(std::chrono::milliseconds(13));
         }
-    } catch (std::exception& e) { cout << e.what() << endl; }
+    } catch (std::exception& e) {
+        cout << e.what() << endl;
+        driver.stopListening();
+        listen.join();
 
-    // store results
-    STOFileAdapter::write(qLogger,
-                          subjectDir + "real_time/inverse_kinematics/q.sto");
+        // store results
+        STOFileAdapter::write(
+                qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
+    }
 }
 
 int main(int argc, char* argv[]) {

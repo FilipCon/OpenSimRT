@@ -10,6 +10,7 @@
 
 #include "internal/RealTimeExports.h"
 
+#include <Common/TimeSeriesTable.h>
 #include <OpenSim/Common/MarkerData.h>
 #include <OpenSim/Simulation/Model/Model.h>
 #include <OpenSim/Tools/IKTaskSet.h>
@@ -139,6 +140,10 @@ class RealTime_API InverseKinematics {
     getFrameFromMarkerData(int i, OpenSim::MarkerData& markerData,
                            const std::vector<std::string>& observationOrder,
                            bool isIMU);
+
+    static Input getFrameFromTimeSeriesTable(
+            int i, const OpenSim::TimeSeriesTable_<SimTK::Vec3>& table,
+            const std::vector<std::string>& observationOrder, bool isIMU);
 
  private: /* private members */
     OpenSim::Model model;

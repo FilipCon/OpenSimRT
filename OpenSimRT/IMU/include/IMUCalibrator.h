@@ -37,7 +37,7 @@ class IMU_API IMUCalibrator {
 
     InverseKinematics::Input
     transform(const std::pair<double, std::vector<NGIMUData>>& imuData,
-              const std::vector<SimTK::Vec3>& markerData);
+              const SimTK::Array_<SimTK::Vec3>& markerData);
 
  private:
     void computeAvgStaticPose();

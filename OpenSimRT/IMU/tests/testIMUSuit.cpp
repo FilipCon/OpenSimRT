@@ -5,6 +5,8 @@
 #include "OpenSimUtils.h"
 #include "Settings.h"
 #include "Simulation.h"
+#include "SyncManager.h"
+#include "Utils.h"
 #include "Visualization.h"
 
 #include <Common/TimeSeriesTable.h>
@@ -13,6 +15,7 @@
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <SimTKcommon/internal/State.h>
+#include <SimTKcommon/internal/negator.h>
 #include <Simulation/Model/Model.h>
 #include <chrono>
 #include <cmath>
@@ -97,6 +100,10 @@ void run() {
     clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
+    double samplingRate = 59;
+    double threshold = 0.0001;
+    SyncManager manager(samplingRate, threshold);
+
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
@@ -109,17 +116,27 @@ void run() {
             // get input from imus
             auto imuDataFrame = driver.getFrame();
 
+            // synchronize data packets
+            manager.appendPack(driver.asPairsOfVectors(imuDataFrame));
+            auto pack = manager.getPack();
+
+            cout << manager.getTable().getNumRows() << endl;
+
+            if (pack.second.empty()) continue;
+
+            std::pair<double, std::vector<NGIMUData>> imuData;
+            imuData.first = pack.first;
+            imuData.second = driver.fromVector(pack.second[0]);
+
             // solve ik
-            auto pose = ik.solve(clb.transform(
-                imuDataFrame, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
+            auto pose =
+                    ik.solve(clb.transform(imuData, {Vec3(0, 0, 0) + height}));
 
             // visualize
             visualizer.update(pose.q);
 
             // record
             qLogger.appendRow(pose.t - initTime, ~pose.q);
-            imuLogger.appendRow(imuDataFrame.first - initTime,
-                                ~driver.asVector(imuDataFrame));
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;
@@ -129,8 +146,9 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        CSVFileAdapter::write(imuLogger,
-                              subjectDir + "experimental_data/ngimu_data.csv");
+        // CSVFileAdapter::write(imuLogger,
+        //                       subjectDir +
+        //                       "experimental_data/ngimu_data.csv");
     }
 }
 

@@ -72,9 +72,13 @@ template <typename> struct is_simtk_vec : std::false_type {};
 template <int M, class ELT, int STRIDE>
 struct is_simtk_vec<SimTK::Vec<M, ELT, STRIDE>> : std::true_type {};
 
-// simtk vector
+// simtk vectors
+// template <typename> struct is_simtk_row_vector_view : std::false_type {};
+// template <class ELT>
+// struct is_simtk_row_vector_view<SimTK::RowVectorView_<ELT>> : std::true_type {};
+
 template <typename> struct is_simtk_vector : std::false_type {};
 template <class ELT>
-struct is_simtk_vector<SimTK::RowVectorView_<ELT>> : std::true_type {};
+struct is_simtk_vector<SimTK::Vector_<ELT>> : std::true_type {};
 
 } // namespace OpenSimRT

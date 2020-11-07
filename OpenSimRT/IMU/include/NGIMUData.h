@@ -4,7 +4,13 @@
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/Quaternion.h>
 #include <Simbody.h>
-#include <osc/OscTypes.h>
+
+#define PICOSECS_RESOLUTION_BIN 4294967295UL // pow(2, 32)
+#define PICOSECS_RESOLUTION_DEC 1000000000   // pow(10, 9)
+
+#define RFC_PROTOCOL                                                           \
+    2208988800UL // RFC protocol counting 70 years since Jan 1 1900, 00:00 GMT
+#define GMT_LOCAL_TIMEZONE 10800UL // Timezone in Greece is GMT+03:00
 
 namespace OpenSimRT {
 
@@ -12,31 +18,22 @@ namespace OpenSimRT {
 struct IMU_API NGIMUData {
     struct Quaternion {
         SimTK::Quaternion q;
-        osc::uint64 timeStamp;
+        double timeStamp;
     };
     struct Sensors {
-        struct Acceleration {
-            SimTK::Vec3 a;
-        };
-        struct Gyroscope {
-            SimTK::Vec3 g;
-        };
-        struct Magnetometer {
-            SimTK::Vec3 m;
-        };
-        Acceleration acceleration; // in g
-        Gyroscope gyroscope;       // in circ/sec
-        Magnetometer magnetometer; // in uT
-        double barometer;          // in hPa
-        osc::uint64 timeStamp;
+        SimTK::Vec3 acceleration; // in g
+        SimTK::Vec3 gyroscope;    // in circ/sec
+        SimTK::Vec3 magnetometer; // in uT
+        SimTK::Vec1 barometer;    // in hPa
+        double timeStamp;
     };
     struct LinearAcceleration {
-        SimTK::Vec3 a;
-        osc::uint64 timeStamp;
+        SimTK::Vec3 acceleration;
+        double timeStamp;
     };
     struct Altitude {
-        double x;
-        osc::uint64 timeStamp;
+        SimTK::Vec1 measurement;
+        double timeStamp;
     };
 
     Sensors sensors;
@@ -46,6 +43,10 @@ struct IMU_API NGIMUData {
     static constexpr int size() { return 18; }
     SimTK::Vector asVector() const;
     void fromVector(const SimTK::Vector&);
+
+    std::vector<std::pair<double, SimTK::Vector>> getAsPairsOfVectors() const;
+    void
+    setFromPairsOfVectors(const std::vector<std::pair<double, SimTK::Vector>>&);
 };
 
 inline bool operator==(const NGIMUData& lhs, const NGIMUData& rhs) {

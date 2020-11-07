@@ -3,6 +3,9 @@
 #include "NGIMUData.h"
 #include "ip/UdpSocket.h"
 
+#include <SimTKcommon/internal/BigMatrix.h>
+#include <vector>
+
 /**
  * @brief xio NGIMU Manager implementation
  */
@@ -11,7 +14,7 @@ namespace OpenSimRT {
 
 class IMU_API NGIMUInputDriver : public InputDriver<NGIMUData> {
  public:
-    typedef std::pair<double, std::vector<NGIMUData>> IMUDataFrame;
+    typedef std::vector<NGIMUData> IMUDataFrame;
     NGIMUInputDriver() = default;
     NGIMUInputDriver(const std::vector<std::string>& names,
                      const std::vector<std::string>&, const std::vector<int>&);
@@ -34,9 +37,11 @@ class IMU_API NGIMUInputDriver : public InputDriver<NGIMUData> {
     virtual void stopListening() override;
     OpenSim::TimeSeriesTable initializeLogger();
 
+    // representation formats
     static SimTK::Vector asVector(const IMUDataFrame& imuDataFrame);
-
     static std::vector<NGIMUData> fromVector(const SimTK::Vector& v);
+    static std::vector<std::pair<double, SimTK::Vector>>
+    asPairsOfVectors(const IMUDataFrame& imuDataFrame);
 
  private:
     SocketReceiveMultiplexer mux;

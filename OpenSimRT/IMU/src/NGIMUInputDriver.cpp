@@ -29,16 +29,10 @@ using namespace OpenSimRT;
 
 #define OUTPUT_BUFFER_SIZE 1024
 
-#define PICOSECS_RESOLUTION_BIN 4294967295UL // pow(2, 32)
-#define PICOSECS_RESOLUTION_DEC 1000000000   // pow(10, 9)
 #define TIME_NOW                                                               \
     duration_cast<nanoseconds>(                                                \
             high_resolution_clock::now().time_since_epoch())                   \
             .count()
-
-#define RFC_PROTOCOL                                                           \
-    2208988800UL // RFC protocol counting 70 years since Jan 1 1900, 00:00 GMT
-#define GMT_LOCAL_TIMEZONE 10800UL // Timezone in Greece is GMT+03:00
 
 /*  TODO this is shit!
  */
@@ -59,7 +53,7 @@ template <typename... Args>
 void sendMessage(UdpTransmitSocket& socket, const std::string& command,
                  Args&&... args) {
     // create tuple from args to allow different types
-    using ArgsTuple = std::tuple<std::decay_t<Args>...>;
+    using ArgsTuple = std::tuple<Args...>;
     ArgsTuple argTuple = {std::forward<Args>(args)...};
 
     // initialize message stream
@@ -157,32 +151,19 @@ void NGIMUInputDriver::startListening() {
 void NGIMUInputDriver::stopListening() { mux.Break(); }
 
 NGIMUInputDriver::IMUDataFrame NGIMUInputDriver::getFrame() {
-    vector<NGIMUData> results;
-    double time;
+    IMUDataFrame results;
     for (const auto& listener : listeners) {
         results.push_back(buffer[listener->port]->get(CIRCULAR_BUFFER_SIZE)[0]);
-
-        // keep the timestamp of sampled quaternions
-        const auto& timeStamp = results.back().quaternion.timeStamp;
-
-        // the 32-first bits are the #seconds since Jan 1 1900 00:00 GMT. To
-        // start from 1970 (Unix epoch), remove the 70 years in seconds. Add 3
-        // hours since local timezone is GMT+03:00
-        time = (timeStamp >> 32) +
-               double(timeStamp & 0xFFFFFFFF) / PICOSECS_RESOLUTION_BIN -
-               RFC_PROTOCOL - GMT_LOCAL_TIMEZONE;
-        // if (initFrameTime == 0) initFrameTime = time;
-        // time -= initFrameTime;
     }
-    return make_pair(time, results);
+    return results;
 }
 
 // transform all imu dataFrames into a single vector
 SimTK::Vector NGIMUInputDriver::asVector(const IMUDataFrame& imuDataFrame) {
     int n = NGIMUData::size();
-    SimTK::Vector vec(n * imuDataFrame.second.size());
+    SimTK::Vector vec(n * imuDataFrame.size());
     int i = 0;
-    for (const auto& imuData : imuDataFrame.second) {
+    for (const auto& imuData : imuDataFrame) {
         vec(i, n) = imuData.asVector();
         i += n;
     }
@@ -197,6 +178,16 @@ std::vector<NGIMUData> NGIMUInputDriver::fromVector(const SimTK::Vector& v) {
         frame.push_back(data);
     }
     return frame;
+}
+
+std::vector<std::pair<double, SimTK::Vector>>
+NGIMUInputDriver::asPairsOfVectors(const IMUDataFrame& imuDataFrame) {
+    std::vector<std::pair<double, SimTK::Vector>> res;
+    for (const auto& frame : imuDataFrame) {
+        for (const auto& p : frame.getAsPairsOfVectors()) {
+            res.push_back(p);}
+    }
+    return std::move(res);
 }
 
 OpenSim::TimeSeriesTable NGIMUInputDriver::initializeLogger() {

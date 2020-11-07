@@ -6,6 +6,7 @@
 #include "PositionTracker.h"
 #include "Settings.h"
 #include "Simulation.h"
+#include "SyncManager.h"
 #include "Visualization.h"
 
 #include <Common/TimeSeriesTable.h>
@@ -20,9 +21,12 @@
 #include <cmath>
 #include <exception>
 #include <future>
+#include <iomanip>
 #include <iostream>
 #include <simbody/internal/Visualizer.h>
 #include <thread>
+#include <utility>
+#include <vector>
 
 using namespace std;
 using namespace OpenSim;
@@ -111,6 +115,10 @@ void run() {
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
 
+    double samplingRate = 30;
+    double threshold = 0.0001;
+    SyncManager manager(samplingRate, threshold);
+
     // // position tracking
     // PositionTracker pt = PositionTracker(model, imuObservationOrder);
 
@@ -129,8 +137,27 @@ void run() {
         while (true) {
             // get input from imus
             auto imuDataFrame = driver.getFrame();
-            auto handle = std::async(std::launch::async,
-                                     &MoticonReceiver::receiveData, &mt);
+            auto insoleDataFrame =
+                    std::async(&MoticonReceiver::receiveData, &mt).get();
+
+            // change frame representation
+            const auto imuDataAsPairs = driver.asPairsOfVectors(imuDataFrame);
+            const auto insoleDataAsPairs = make_pair(
+                    insoleDataFrame.timestamp, insoleDataFrame.asVector());
+
+            // synchronize data streams
+            manager.appendPack(imuDataAsPairs, insoleDataAsPairs);
+            auto pack = manager.getPack();
+
+            if (SimTK::isInf(pack.first)) continue;
+
+            std::pair<double, std::vector<NGIMUData>> imuData;
+            imuData.first = pack.first;
+            imuData.second = driver.fromVector(pack.second[0]);
+
+            MoticonReceivedBundle moticonData;
+            moticonData.timestamp = pack.first;
+            moticonData.fromVector(pack.second[1]);
 
             // // estimate position from IMUs
             // auto pos = pt.computePosition(imuDataFrame) + height;
@@ -138,10 +165,7 @@ void run() {
             Vec3 pos = Vec3(0, 0, 0) + height;
 
             // solve ik
-            auto pose = ik.solve(
-                    clb.transform(imuDataFrame, vector<SimTK::Vec3>{pos}));
-
-            auto insoleDataFrame = handle.get();
+            auto pose = ik.solve(clb.transform(imuData, {pos}));
 
             const auto& r_cop = insoleDataFrame.right.cop;
             const auto& r_force = insoleDataFrame.right.totalForce;
@@ -163,10 +187,13 @@ void run() {
             leftInsoleDecorator->update(calcn_l_point_in_ground,
                                         l_force * Vec3(0, 1, 0));
 
+            // cout << std::setprecision(15) << pose.t << " " <<
+            // imuDataFrame.first
+            //      << " " << insoleDataFrame.timestamp << endl;
             // record
             qLogger.appendRow(pose.t - initTime, ~pose.q);
-            imuLogger.appendRow(imuDataFrame.first - initTime,
-                                ~driver.asVector(imuDataFrame));
+            // imuLogger.appendRow( - initTime,
+            //                     ~driver.asVector(imuDataFrame));
             mtLogger.appendRow(insoleDataFrame.timestamp - initTime,
                                ~insoleDataFrame.asVector());
             // avp.appendRow(pose.t - initTime, ~Vector(pos));
@@ -179,8 +206,9 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        CSVFileAdapter::write(imuLogger,
-                              subjectDir + "experimental_data/ngimu_data.csv");
+        // CSVFileAdapter::write(imuLogger,
+        //                       subjectDir +
+        //                       "experimental_data/ngimu_data.csv");
         CSVFileAdapter::write(mtLogger,
                               subjectDir + "experimental_data/moticon.csv");
         // CSVFileAdapter::write(avp,

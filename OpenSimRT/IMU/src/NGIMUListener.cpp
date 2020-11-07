@@ -42,13 +42,20 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
     // every time this function runs, it processes only one message, i.e.
     // /quaternions or /sensors.
     try {
+        // the 32-first bits are the #seconds since Jan 1 1900 00:00 GMT. To
+        // start from 1970 (Unix epoch), remove the 70 years in seconds. Add 3
+        // hours since local timezone is GMT+03:00
+        auto time = (timeTag >> 32) +
+                    double(timeTag & 0xFFFFFFFF) / PICOSECS_RESOLUTION_BIN -
+                    RFC_PROTOCOL - GMT_LOCAL_TIMEZONE;
+
         // get /quaternions
         if (strcmp(m.AddressPattern(), "/quaternion") == 0) {
             ReceivedMessageArgumentStream args = m.ArgumentStream();
             float q1, q2, q3, q4;
             args >> q1 >> q2 >> q3 >> q4 >> osc::EndMessage;
             quaternion = new NGIMUData::Quaternion{
-                    SimTK::Quaternion(q1, q2, q3, q4), timeTag};
+                    SimTK::Quaternion(q1, q2, q3, q4), time};
         }
 
         // get /sensors
@@ -61,14 +68,11 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
             args >> gX >> gY >> gZ >> aX >> aY >> aZ >> mX >> mY >> mZ >>
                     barometer >> osc::EndMessage;
             sensors = new NGIMUData::Sensors();
-            sensors->acceleration =
-                    NGIMUData::Sensors::Acceleration{SimTK::Vec3(aX, aY, aZ)};
-            sensors->gyroscope =
-                    NGIMUData::Sensors::Gyroscope{SimTK::Vec3(gX, gY, gZ)};
-            sensors->magnetometer =
-                    NGIMUData::Sensors::Magnetometer{SimTK::Vec3(mX, mY, mZ)};
-            sensors->barometer = barometer;
-            sensors->timeStamp = timeTag;
+            sensors->acceleration = SimTK::Vec3(aX, aY, aZ);
+            sensors->gyroscope = SimTK::Vec3(gX, gY, gZ);
+            sensors->magnetometer = SimTK::Vec3(mX, mY, mZ);
+            sensors->barometer = SimTK::Vec1(barometer);
+            sensors->timeStamp = time;
         }
 
         if (strcmp(m.AddressPattern(), "/linear") == 0) {
@@ -76,14 +80,14 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
             float ax, ay, az; // linear acceleration
             args >> ax >> ay >> az >> osc::EndMessage;
             linear = new NGIMUData::LinearAcceleration{SimTK::Vec3(ax, ay, az),
-                                                       timeTag};
+                                                       time};
         }
 
         if (strcmp(m.AddressPattern(), "/altitude") == 0) {
             ReceivedMessageArgumentStream args = m.ArgumentStream();
             float x;
             args >> x >> osc::EndMessage;
-            altitude = new NGIMUData::Altitude{x, timeTag};
+            altitude = new NGIMUData::Altitude{SimTK::Vec1(x), time};
         }
 
         // TODO add more patterns if necessary
@@ -92,7 +96,8 @@ void NGIMUListener::ProcessMessage(const ReceivedMessage& m,
 
         if (strcmp(m.AddressPattern(), "/button") == 0) {
             driver->stopListening(); // TODO do something else with it
-            THROW_EXCEPTION("Destruction Button is Pressed! Goodbye cruel word!");
+            THROW_EXCEPTION(
+                    "Destruction Button is Pressed! Goodbye cruel word!");
         }
 
         // when all messages are processed, push IMU bundle to buffer

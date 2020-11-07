@@ -2,6 +2,7 @@
 #include "Utils.h"
 
 #include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/Array.h>
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <SimTKcommon/internal/NTraits.h>
 #include <SimTKcommon/internal/Quaternion.h>
@@ -17,52 +18,56 @@ using namespace std;
 using namespace OpenSimRT;
 
 void run() {
-    SyncManager manager(0.05);
+    SyncManager manager(1000.0, 0.01);
 
     manager.appendPack(
             // pair
             std::pair<double, SimTK::Vec4>(0, SimTK::Quaternion().asVec4()),
-            std::pair<double, SimTK::Vec4>(0.1, SimTK::Quaternion().asVec4()),
+            std::pair<double, SimTK::Vec4>(0, SimTK::Quaternion().asVec4()),
 
             // container of pairs
             std::vector<std::pair<double, SimTK::Vec4>>{
-                    {0.1, SimTK::Quaternion(0.5, 0.5, 0.5, 0.5).asVec4()},
-                    {0.1, SimTK::Quaternion(1, 0, 0, 0).asVec4()}},
+                    {0, SimTK::Quaternion(0.5, 0.5, 0.5, 0.5).asVec4()},
+                    {0, SimTK::Quaternion(1, 0, 0, 0).asVec4()}},
 
             // pair with larger time
-            std::pair<double, SimTK::Vec4>(0.3, SimTK::Quaternion().asVec4()),
+            std::pair<double, SimTK::Vec4>(
+                    0, SimTK::Quaternion(0.5, 0.5, 0.5, 0.5).asVec4()),
 
             // pair with container of vecs
             std::pair<double, std::vector<SimTK::Vec3>>(
-                    0.2, {SimTK::Vec3(0), SimTK::Vec3(0)}));
+                    0,
+                    {SimTK::Vec3(0.3, 0.3, 0.3), SimTK::Vec3(0.2, 0.2, 0.2)}));
+
+    manager.getPack();
 
     manager.appendPack(
 
             // pair
             std::pair<double, SimTK::Vec4>(
                     0.4, SimTK::Quaternion(0.5, 0.5, 0.5, 0.5).asVec4()),
-            std::pair<double, SimTK::Vec4>(0.54, SimTK::Quaternion().asVec4()),
+            std::pair<double, SimTK::Vec4>(0.4, SimTK::Quaternion().asVec4()),
 
             // container of pairs
             std::vector<std::pair<double, SimTK::Vec4>>{
-                    {0.3, SimTK::Quaternion().asVec4()},
-                    {0.3, SimTK::Quaternion(1, 0, 0, 0).asVec4()}},
+                    {0.4, SimTK::Quaternion().asVec4()},
+                    {0.4, SimTK::Quaternion(0.5, 0.5, 0.5, 0.5).asVec4()}},
 
             // pair with larger time
-            std::pair<double, SimTK::Vec4>(0.5, SimTK::Quaternion().asVec4()),
+            std::pair<double, SimTK::Vec4>(0.4, SimTK::Quaternion().asVec4()),
 
             // pair with container of vecs
             std::pair<double, std::vector<SimTK::Vec3>>(
-                    0.1, {SimTK::Vec3(0), SimTK::Vec3(0)}));
+                    0.4, {SimTK::Vec3(0), SimTK::Vec3(0)}));
 
-    const auto& time = manager.getTable().getIndependentColumn();
-    cout << "Time Column: ";
-    for (const auto& t : time) cout << t << " ";
-    cout << endl;
-    cout << "table data: " << manager.getTable().getMatrix() << endl;
+    cout << "Time Column: "
+         << SimTK::Array_<double>(manager.getTable().getIndependentColumn())
+         << endl;
+    cout << "Table data: " << manager.getTable().getMatrix() << endl;
 
-    auto pack = manager.getPack(0, 0);
-    cout << pack.first << " " << pack.second << endl;
+    auto pack = manager.getPack();
+    if (!pack.second.empty())
+        cout << pack.first << " " << pack.second[0] << endl;
 }
 
 int main(int argc, char* argv[]) {

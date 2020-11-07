@@ -19,7 +19,7 @@ class IMU_API NGIMUListener : public osc::OscPacketListener,
  public:
     NGIMUListener();
     ~NGIMUListener();
-    osc::uint64 timeTag; // TODO time is measured from 1970
+    osc::uint64 timeTag;
 
     //// TODO: add more pointers to imu data if required
     NGIMUData::Quaternion* quaternion;

@@ -12,6 +12,7 @@
 #include "Visualization.h"
 
 #include <Common/TimeSeriesTable.h>
+#include <OpenSim/Common/CSVFileAdapter.h>
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
@@ -76,13 +77,15 @@ void run() {
             model, imuObservationOrder, imuTasks);
 
     // ngimu input data driver from file
-    NGIMUInputFromFileDriver driver(ngimuDataFile);
+    NGIMUInputFromFileDriver imuDriver(ngimuDataFile, 60);
+    imuDriver.startListening();
 
     // insole driver
-    MoticonReceiverFromFile mt(moticonDataFile);
+    MoticonReceiverFromFile insoleDriver(moticonDataFile, 50);
+    insoleDriver.startListening();
 
     // calibrator
-    IMUCalibrator clb(model, &driver, imuObservationOrder);
+    IMUCalibrator clb(model, &imuDriver, imuObservationOrder);
     clb.recordNumOfSamples(1);
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
     clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
@@ -92,7 +95,9 @@ void run() {
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
 
-    SyncManager manager(1 / 60 / 5.0);
+    double samplingRate = 49;
+    double threshold = 0.0001;
+    SyncManager manager(samplingRate, threshold);
 
     // visualizer
     BasicModelVisualizer visualizer(model);
@@ -101,36 +106,29 @@ void run() {
     auto leftInsoleDecorator = new ForceDecorator(Green, 0.01, 3);
     visualizer.addDecorationGenerator(leftInsoleDecorator);
 
-    size_t i = 0;
     try { // main loop
         while (true) {
             // get input from sensors
-            auto imuDataFrame = driver.getFrameAsVector();
-            auto insoleDataFrame = mt.getFrameAsVector();
+            auto imuDataFrame = imuDriver.getFrameAsVector();
+            auto insoleDataFrame = insoleDriver.getFrameAsVector();
 
             // synchronize data streams
             manager.appendPack(imuDataFrame, insoleDataFrame);
+            auto pack = manager.getPack();
+
+            cout << manager.getTable().getNumRows() << endl;
+            if (pack.second.empty()) continue;
+
+            auto imuData =
+                    make_pair(pack.first, imuDriver.fromVector(pack.second[0]));
 
             MoticonReceivedBundle moticonData;
-            auto insolePack = manager.getPack(1);
-            moticonData.timestamp = insolePack.first;
-            moticonData.fromVector(insolePack.second);
-
-            NGIMUInputDriver::IMUDataFrame imuData;
-            auto imuPack = manager.getPack(0);
-            imuData.first = imuPack.first;
-            imuData.second = driver.fromVector(imuPack.second);
-
-            ++i;
-
-            // ignore nans
-            if (!isVectorFinite(imuPack.second) ||
-                !isVectorFinite(insolePack.second))
-                continue;
+            moticonData.timestamp = pack.first;
+            moticonData.fromVector(pack.second[1]);
 
             // solve ik
-            auto pose = ik.solve(clb.transform(
-                    imuData, vector<SimTK::Vec3>{Vec3(0, 0, 0) + height}));
+            auto pose =
+                    ik.solve(clb.transform(imuData, {Vec3(0, 0, 0) + height}));
 
             // insole aliases
             const auto& r_cop = moticonData.right.cop;
@@ -154,16 +152,22 @@ void run() {
                                         l_force * Vec3(0, 1, 0));
 
             // record
-            qLogger.appendRow(pose.t, ~pose.q);
+            // qLogger.appendRow(pose.t, ~pose.q);
+            // imuLogger.appendRow(pack.first, ~pack.second[0]);
+            // insoleLogger.appendRow(pack.first, ~pack.second[1]);
 
             // // dummy delay to simulate real time
-            std::this_thread::sleep_for(std::chrono::milliseconds(13));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(13));
         }
     } catch (std::exception& e) { cout << e.what() << endl; }
 
     // // store results
-    // STOFileAdapter::write(qLogger,
-    //                       subjectDir + "real_time/inverse_kinematics/q.sto");
+    STOFileAdapter::write(qLogger,
+                          subjectDir + "real_time/inverse_kinematics/q.sto");
+    // CSVFileAdapter::write(imuLogger,
+    //                       subjectDir + "real_time/sync/ngimu_data.csv");
+    // CSVFileAdapter::write(insoleLogger,
+    //                       subjectDir + "real_time/sync/moticon_data.csv");
 }
 
 int main(int argc, char* argv[]) {

@@ -1,10 +1,14 @@
 #include "NGIMUInputFromFileDriver.h"
 
 #include "Exception.h"
+#include "NGIMUData.h"
 
 #include <Common/TimeSeriesTable.h>
 #include <iostream>
 #include <iterator>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 using namespace OpenSimRT;
 
@@ -19,33 +23,54 @@ NGIMUInputFromFileDriver::fromVector(const SimTK::Vector& v) {
     return frame;
 }
 
-NGIMUInputFromFileDriver::NGIMUInputFromFileDriver(const std::string& fileName)
-        : table(fileName), i(0) {}
+NGIMUInputFromFileDriver::NGIMUInputFromFileDriver(const std::string& fileName,
+                                                   const double& rate)
+        : table(fileName), _rate(rate), i(0) {}
+NGIMUInputFromFileDriver::~NGIMUInputFromFileDriver() { t.join(); }
+void NGIMUInputFromFileDriver::startListening() {
+    static auto f = [&]() {
+        while (true) {
+            {
+                std::lock_guard<std::mutex> lock(_mutex);
+                _time = table.getIndependentColumn()[i];
+                _frame = table.getMatrix()[i];
+                _newRow = true;
+            }
+            _cond.notify_one();
 
-NGIMUInputFromFileDriver::IMUDataFrame NGIMUInputFromFileDriver::getFrame() {
-    const auto time = table.getIndependentColumn()[i];
-    const auto row = table.getMatrix()[i].getAsVector();
+            // increase counter
+            if (i < table.getNumRows())
+                ++i;
+            else
+                THROW_EXCEPTION("End of file.");
 
-    // increase counter
-    if (i < table.getNumRows())
-        ++i;
-    else
-        i = 0;
-    return std::move(std::make_pair(time, fromVector(row)));
+            std::this_thread::sleep_for(std::chrono::milliseconds(
+                    static_cast<int>(1 / _rate * 1000)));
+        }
+    };
+    t = std::thread(f);
+}
+
+std::vector<NGIMUData> NGIMUInputFromFileDriver::getFrame() {
+    std::unique_lock<std::mutex> lock(_mutex);
+    _cond.wait(lock, [&]() { return _newRow == true; });
+    _newRow = false;
+    return std::move(fromVector(_frame.getAsVector()));
 }
 
 NGIMUInputFromFileDriver::IMUDataFrameAsVector
 NGIMUInputFromFileDriver::getFrameAsVector() {
-    const auto time = table.getIndependentColumn()[i];
-    const auto row = table.getMatrix()[i].getAsRowVectorView();
-
-    // increase counter
-    if (i < table.getNumRows())
-        ++i;
-    else
-        i = 0;
-    return std::move(std::make_pair(time, row));
+    std::unique_lock<std::mutex> lock(_mutex);
+    _cond.wait(lock, [&]() { return _newRow == true; });
+    _newRow = false;
+    return std::move(std::make_pair(_time, _frame.getAsVector()));
 }
 
-void NGIMUInputFromFileDriver::startListening() {}
-void NGIMUInputFromFileDriver::stopListening() {}
+OpenSim::TimeSeriesTable NGIMUInputFromFileDriver::initializeLogger() {
+    OpenSim::TimeSeriesTable q;
+    q.updTableMetaData() = table.updTableMetaData();
+    q.setColumnLabels(table.getColumnLabels());
+
+    // return table
+    return q;
+}

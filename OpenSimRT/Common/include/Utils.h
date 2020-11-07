@@ -39,7 +39,7 @@ void simtkToStd(const T& srcArray, U& dstVector) {
     dstVector.clear();
     int size = srcArray.size();
     dstVector.resize(size);
-    for (int i = 0; i < size; ++i) { dstVector.at(i) = srcArray.get(i); }
+    for (int i = 0; i < size; ++i) { dstVector.at(i) = srcArray[i]; }
 }
 
 /**
