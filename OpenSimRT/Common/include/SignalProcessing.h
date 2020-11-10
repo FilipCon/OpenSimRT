@@ -194,9 +194,11 @@ class Common_API IIRFilter {
 class Common_API ButterworthFilter {
  public:
     enum class FilterType { LowPass, HighPass, BandPass, BandCut };
-    ButterworthFilter(int filtOrder, double cutOffFreq, const FilterType& type,
+    ButterworthFilter(int dim, int filtOrder, double cutOffFreq,
+                      const FilterType& type,
                       const IIRFilter::InitialValuePolicy& policy);
-    void setupFilter(int filtOrder, double cutOffFreq, const FilterType& type,
+    void setupFilter(int dim, int filtOrder, double cutOffFreq,
+                     const FilterType& type,
                      const IIRFilter::InitialValuePolicy& policy);
     SimTK::Vector filter(const SimTK::Vector& xn);
 
@@ -266,7 +268,7 @@ class Common_API NumericalDifferentiator : public FIRFilter {
 class Common_API NumericalIntegrator {
     double t0;
     SimTK::Vector x0;
-
+    bool _isSet;
  public:
     NumericalIntegrator(const int& n);
     NumericalIntegrator(const int& n, const SimTK::Vector& initValue,
@@ -281,48 +283,43 @@ class Common_API NumericalIntegrator {
  */
 
 class Common_API KalmanFilter {
-
-public:
+ public:
     /**
-  * Create a Kalman filter with the specified matrices.
-  *   A - System dynamics matrix
-  *   B - excluded //TODO
-  *   C - Output matrix
-  *   Q - Process noise covariance
-  *   R - Measurement noise covariance
-  *   P - Estimate error covariance
-  */
-    KalmanFilter(
-            const SimTK::Matrix& A,
-            const SimTK::Matrix& C,
-            const SimTK::Matrix& Q,
-            const SimTK::Matrix& R,
-            const SimTK::Matrix& P,
-            const int& p);
+     * Create a Kalman filter with the specified matrices.
+     *   A - System dynamics matrix
+     *   B - excluded //TODO
+     *   C - Output matrix
+     *   Q - Process noise covariance
+     *   R - Measurement noise covariance
+     *   P - Estimate error covariance
+     */
+    KalmanFilter(const SimTK::Matrix& A, const SimTK::Matrix& C,
+                 const SimTK::Matrix& Q, const SimTK::Matrix& R,
+                 const SimTK::Matrix& P, const int& p);
 
     /**
-  * Initialize the filter with initial states as zero.
-  */
+     * Initialize the filter with initial states as zero.
+     */
     void init();
 
     /**
-  * Initialize the filter with a guess for initial states.
-  */
+     * Initialize the filter with a guess for initial states.
+     */
     void init(const SimTK::Vector& y0);
 
     /**
-  * Update the estimated state based on measured values. The
-  * time step is assumed to remain constant.
-  */
+     * Update the estimated state based on measured values. The
+     * time step is assumed to remain constant.
+     */
     SimTK::Vector filter(const SimTK::Vector& y);
 
     /**
-  * Update the estimated state based on measured values,
-  * using the given time step and dynamics matrix.
-  */
+     * Update the estimated state based on measured values,
+     * using the given time step and dynamics matrix.
+     */
     SimTK::Vector filter(const SimTK::Vector& y, const SimTK::Matrix A);
 
-private:
+ private:
     // Matrices for computation
     SimTK::Matrix A, C, Q, R, P, K, P0;
 

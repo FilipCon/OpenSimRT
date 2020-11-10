@@ -4,6 +4,7 @@
 #include <OpenSim/Common/TimeSeriesTable.h>
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <condition_variable>
+#include <exception>
 #include <string>
 
 namespace OpenSimRT {
@@ -18,6 +19,7 @@ class Moticon_API MoticonReceiverFromFile {
     void startListening();
     OpenSim::TimeSeriesTable initializeLogger();
 
+    std::exception_ptr exc_ptr;
  private:
     OpenSim::TimeSeriesTable table;
     int i;

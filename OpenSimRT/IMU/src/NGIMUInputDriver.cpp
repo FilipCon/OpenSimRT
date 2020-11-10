@@ -1,5 +1,6 @@
 #include "NGIMUInputDriver.h"
 
+#include "Exception.h"
 #include "InverseKinematics.h"
 #include "NGIMUData.h"
 #include "NGIMUListener.h"
@@ -184,8 +185,7 @@ std::vector<std::pair<double, SimTK::Vector>>
 NGIMUInputDriver::asPairsOfVectors(const IMUDataFrame& imuDataFrame) {
     std::vector<std::pair<double, SimTK::Vector>> res;
     for (const auto& frame : imuDataFrame) {
-        for (const auto& p : frame.getAsPairsOfVectors()) {
-            res.push_back(p);}
+        for (const auto& p : frame.getAsPairsOfVectors()) { res.push_back(p); }
     }
     return std::move(res);
 }

@@ -77,7 +77,7 @@ IMUCalibrator::IMUCalibrator(const Model& otherModel,
     }
 }
 
-void IMUCalibrator::setGroundOrientationSeq(const double& xDegrees,
+SimTK::Rotation IMUCalibrator::setGroundOrientationSeq(const double& xDegrees,
                                             const double& yDegrees,
                                             const double& zDegrees) {
     auto xRad = SimTK::convertDegreesToRadians(xDegrees);
@@ -86,9 +86,10 @@ void IMUCalibrator::setGroundOrientationSeq(const double& xDegrees,
 
     R_GoGi = Rotation(SimTK::BodyOrSpaceType::SpaceRotationSequence, xRad,
                       SimTK::XAxis, yRad, SimTK::YAxis, zRad, SimTK::ZAxis);
+    return R_GoGi;
 }
 
-void IMUCalibrator::computeheadingRotation(
+SimTK::Rotation IMUCalibrator::computeheadingRotation(
         const std::string& baseImuName, const std::string& imuDirectionAxis) {
     if (!imuDirectionAxis.empty() && !baseImuName.empty()) {
         // set coordinate direction based on given imu direction axis given as
@@ -158,6 +159,8 @@ void IMUCalibrator::computeheadingRotation(
                 "default"
              << endl;
     }
+
+    return R_heading;
 }
 
 void IMUCalibrator::calibrateIMUTasks(

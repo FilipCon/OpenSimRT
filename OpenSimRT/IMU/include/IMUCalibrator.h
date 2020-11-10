@@ -25,13 +25,13 @@ class IMU_API IMUCalibrator {
                   InputDriver<NGIMUData>* const driver,
                   const std::vector<std::string>& observationOrder);
 
-    void setGroundOrientationSeq(const double& xDegrees, const double& yDegrees,
+    SimTK::Rotation setGroundOrientationSeq(const double& xDegrees, const double& yDegrees,
                                  const double& zDegrees);
     void recordTime(const double& timeout);
 
     void recordNumOfSamples(const size_t& numSamples);
 
-    void computeheadingRotation(const std::string& baseImuName,
+    SimTK::Rotation computeheadingRotation(const std::string& baseImuName,
                                 const std::string& imuDirectionAxis);
     void calibrateIMUTasks(std::vector<InverseKinematics::IMUTask>& imuTasks);
 

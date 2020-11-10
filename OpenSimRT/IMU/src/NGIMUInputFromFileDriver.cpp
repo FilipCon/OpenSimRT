@@ -4,6 +4,7 @@
 #include "NGIMUData.h"
 
 #include <Common/TimeSeriesTable.h>
+#include <exception>
 #include <iostream>
 #include <iterator>
 #include <mutex>
@@ -29,23 +30,28 @@ NGIMUInputFromFileDriver::NGIMUInputFromFileDriver(const std::string& fileName,
 NGIMUInputFromFileDriver::~NGIMUInputFromFileDriver() { t.join(); }
 void NGIMUInputFromFileDriver::startListening() {
     static auto f = [&]() {
-        while (true) {
-            {
-                std::lock_guard<std::mutex> lock(_mutex);
-                _time = table.getIndependentColumn()[i];
-                _frame = table.getMatrix()[i];
-                _newRow = true;
+        try {
+            while (true) {
+                {
+                    std::lock_guard<std::mutex> lock(_mutex);
+                    _time = table.getIndependentColumn()[i];
+                    _frame = table.getMatrix()[i];
+                    _newRow = true;
+                }
+                _cond.notify_one();
+
+                // increase counter
+                if (i < table.getNumRows())
+                    ++i;
+                else
+                    THROW_EXCEPTION("End of file.");
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(
+                        static_cast<int>(1 / _rate * 1000)));
             }
-            _cond.notify_one();
-
-            // increase counter
-            if (i < table.getNumRows())
-                ++i;
-            else
-                THROW_EXCEPTION("End of file.");
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(
-                    static_cast<int>(1 / _rate * 1000)));
+        } catch (std::exception& e) {
+            std::cout << e.what() << std::endl;
+            exc_ptr = std::current_exception();
         }
     };
     t = std::thread(f);

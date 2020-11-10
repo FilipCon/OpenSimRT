@@ -1,5 +1,7 @@
+#include "ContactForceBasedPhaseDetector.h"
 #include "INIReader.h"
 #include "OpenSimUtils.h"
+#include "GaitPhaseDetector.h"
 #include "Settings.h"
 #include "SignalProcessing.h"
 #include "Simulation.h"
@@ -8,6 +10,7 @@
 
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <iostream>
+#include <memory>
 
 using namespace std;
 using namespace OpenSim;
@@ -95,10 +98,11 @@ void run() {
 
     // setup grfm prediction
     GRFMPrediction::Parameters parameters;
-    parameters.stance_threshold = 100;
+    parameters.threshold = 100;
     parameters.contact_plane_origin = Vec3(0.0, platform_offset, 0.0);
     parameters.contact_plane_normal = UnitVec3(0, 1, 0);
-    GRFMPrediction grfm(model, parameters);
+    auto detector = ContactForceBasedPhaseDetector(model, parameters);
+    GRFMPrediction grfm(model, parameters, &detector);
 
     // initialize id and logger
     InverseDynamics id(model, wrenchParameters);
@@ -126,6 +130,7 @@ void run() {
         if (!ikFiltered.isValid) { continue; }
 
         // perform grfm prediction
+        detector.updDetector({ikFiltered.t, q, qDot, qDDot});
         auto grfmOutput = grfm.solve({ikFiltered.t, q, qDot, qDDot});
 
         // setup ID input

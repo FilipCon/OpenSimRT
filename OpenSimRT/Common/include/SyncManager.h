@@ -69,11 +69,13 @@ template <typename ETX = double> class Common_API SyncManager {
 
         // create re-sampled entry @ time 't'
         auto rowNew = createRow(t);
-        if (std::find(v.begin(), v.end(), t) == v.end()) {
-            _table.appendRow(t, ~rowNew);
-            reorderTable();
-        } else {
-            setRow(t, ~rowNew);
+        if (isVectorFinite(rowNew)) {
+            if (std::find(v.begin(), v.end(), t) == v.end()) {
+                _table.appendRow(t, ~rowNew);
+                reorderTable();
+            } else {
+                setRow(t, ~rowNew);
+            }
         }
 
         // initialize output
@@ -87,7 +89,7 @@ template <typename ETX = double> class Common_API SyncManager {
             if ((it = std::find_if(v_cpy.rbegin(), v_cpy.rend(),
                                    [&](const auto& x) { return x < t1; })) !=
                 v_cpy.rend())
-                // NOTE: delete rows in original v based on the copy v_cpy
+                // NOTE: delete rows in original v based on values in v_cpy
                 deleteRows(v_cpy.begin(), it.base());
 
             // prepare next sample
@@ -99,7 +101,7 @@ template <typename ETX = double> class Common_API SyncManager {
                         ~_table.getRow(t)(columnId, _vectorSizePerPack[i]));
                 columnId += _vectorSizePerPack[i];
             }
-        }
+        } // WARNING: else returns empty pack
         return std::move(std::make_pair(t, pack));
     }
 

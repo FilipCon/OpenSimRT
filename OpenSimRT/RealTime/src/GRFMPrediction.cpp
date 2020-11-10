@@ -1,6 +1,6 @@
 #include "GRFMPrediction.h"
 
-#include "PhaseDetector.h"
+#include "GaitPhaseDetector.h"
 #include "Simulation.h"
 
 using namespace std;
@@ -22,13 +22,12 @@ static Vec3 projectionOnPlane(const Vec3& point, const Vec3& planeOrigin,
 //==============================================================================
 
 GRFMPrediction::GRFMPrediction(const Model& otherModel,
-                               const Parameters& otherParameters)
-        : model(*otherModel.clone()), parameters(otherParameters) {
+                               const Parameters& otherParameters,
+                               GaitPhaseDetector* detector)
+        : model(*otherModel.clone()), parameters(otherParameters),
+          gaitPhaseDetector(detector) {
     // reserve memory size for computing the mean gait direction
     gaitDirectionBuffer.setSize(BUFFER_SIZE);
-
-    // gait phase detector
-    gaitPhaseDetector = new ContactForceBasedPhaseDetector(model, parameters);
 
     // add station points to the model for the CoP trajectory
     heelStationR = new Station(model.getBodySet().get("calcn_r"),
@@ -133,8 +132,6 @@ vector<GRFMPrediction::Output>
 GRFMPrediction::solve(const GRFMPrediction::Input& input) {
     // update state variables of this instance
     t = input.t;
-    gaitPhaseDetector->updDetector(input);
-
     if (gaitPhaseDetector->isDetectorReady()) {
         // update model state
         updateState(input, model, state, Stage::Dynamics);

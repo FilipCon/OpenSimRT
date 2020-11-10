@@ -4,6 +4,7 @@
 #include "MoticonData.h"
 
 #include <SimTKcommon/internal/BigMatrix.h>
+#include <exception>
 
 using namespace OpenSimRT;
 MoticonReceiverFromFile::MoticonReceiverFromFile(const std::string& fileName,
@@ -13,23 +14,28 @@ MoticonReceiverFromFile::~MoticonReceiverFromFile() { t.join(); }
 
 void MoticonReceiverFromFile::startListening() {
     static auto f = [&]() {
-        while (true) {
-            {
-                std::lock_guard<std::mutex> lock(_mutex);
-                _time = table.getIndependentColumn()[i];
-                _frame = table.getMatrix()[i];
-                _newRow = true;
+        try {
+            while (true) {
+                {
+                    std::lock_guard<std::mutex> lock(_mutex);
+                    _time = table.getIndependentColumn()[i];
+                    _frame = table.getMatrix()[i];
+                    _newRow = true;
+                }
+                _cond.notify_one();
+
+                // increase counter
+                if (i < table.getNumRows())
+                    ++i;
+                else
+                    THROW_EXCEPTION("End of file.");
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(
+                        static_cast<int>(1 / _rate * 1000)));
             }
-            _cond.notify_one();
-
-            // increase counter
-            if (i < table.getNumRows())
-                ++i;
-            else
-                THROW_EXCEPTION("End of file.");
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(
-                    static_cast<int>(1 / _rate * 1000)));
+        } catch (std::exception& e) {
+            std::cout << e.what() << std::endl;
+            exc_ptr = std::current_exception();
         }
     };
     t = std::thread(f);

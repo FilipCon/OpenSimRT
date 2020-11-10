@@ -2,11 +2,14 @@
 #include "IMUCalibrator.h"
 #include "INIReader.h"
 #include "InverseKinematics.h"
+#include "Measure.h"
+#include "MoticonReceiverFromFile.h"
+#include "NGIMUData.h"
 #include "NGIMUInputDriver.h"
+#include "NGIMUInputFromFileDriver.h"
 #include "OpenSimUtils.h"
 #include "PositionTracker.h"
 #include "Settings.h"
-#include "Simulation.h"
 #include "SyncManager.h"
 #include "Utils.h"
 #include "Visualization.h"
@@ -16,15 +19,20 @@
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
+#include <SimTKcommon/internal/CoordinateAxis.h>
+#include <SimTKcommon/internal/NTraits.h>
 #include <SimTKcommon/internal/State.h>
-#include <SimTKcommon/internal/negator.h>
+#include <SimTKcommon/internal/UnitVec.h>
 #include <Simulation/Model/Model.h>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <exception>
-#include <future>
 #include <iostream>
+#include <iterator>
+#include <optional>
 #include <simbody/internal/Visualizer.h>
+#include <stdexcept>
 #include <thread>
 
 using namespace std;
@@ -34,12 +42,7 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    auto section = "LOWER_BODY_NGIMU";
-    auto IMU_IP = ini.getVector(section, "IMU_IP", vector<string>());
-    auto LISTEN_IP = ini.getString(section, "LISTEN_IP", "0.0.0.0");
-    auto SEND_PORTS = ini.getVector(section, "IMU_SEND_PORTS", vector<int>());
-    auto LISTEN_PORTS =
-            ini.getVector(section, "IMU_LISTEN_PORTS", vector<int>());
+    auto section = "LOWER_BODY_NGIMU_OFFLINE";
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
     auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
     auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
@@ -47,46 +50,26 @@ void run() {
     auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
     auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
 
-    auto platform_offset = ini.getReal(section, "PLATFORM_OFFSET", 0.0);
-
     auto memory = ini.getInteger(section, "MEMORY", 0);
     auto cutoffFreq = ini.getReal(section, "CUTOFF_FREQ", 0);
     auto delay = ini.getInteger(section, "DELAY", 0);
     auto splineOrder = ini.getInteger(section, "SPLINE_ORDER", 0);
 
+    auto platform_offset = ini.getReal(section, "PLATFORM_OFFSET", 0.0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
-    // initial timetag (as decimal) of simulation
-    const auto initTime =
-            static_cast<double>(
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(
-                            std::chrono::high_resolution_clock::now()
-                                    .time_since_epoch())
-                            .count()) /
-            1000000000;
-
+    auto ngimuDataFile =
+            subjectDir + ini.getString(section, "NGIMU_DATA_CSV", "");
     // setup model
     Model model(modelFile);
-
-    // add marker to pelvis center to track model position from imus
-    auto rCalcnMarker = Marker("calcn_r_marker",
-                               model.getBodySet().get("calcn_r"), Vec3(0));
-    auto lCalcnMarker = Marker("calcn_l_marker",
-                               model.getBodySet().get("calcn_l"), Vec3(0));
-    model.addMarker(&rCalcnMarker);
-    model.addMarker(&lCalcnMarker);
-    model.finalizeConnections();
-
-    State state = model.initSystem();
-    model.realizePosition(state);
 
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
     InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"calcn_r_marker", "calcn_l_marker"},
-            markerTasks, markerObservationOrder);
+            model, vector<string>{}, markerTasks, markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -94,37 +77,16 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-    // driver
-    NGIMUInputDriver driver;
-    driver.setupInput(imuObservationOrder,
-                      vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
-                      LISTEN_PORTS);
-    driver.setupTransmitters(IMU_IP, SEND_PORTS, LISTEN_IP, LISTEN_PORTS);
-    thread listen(&NGIMUInputDriver::startListening, &driver);
-    auto imuLogger = driver.initializeLogger();
+    // ngimu input data driver from file
+    NGIMUInputFromFileDriver imuDriver(ngimuDataFile, 60);
+    imuDriver.startListening();
 
     // calibrator
-    IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
-    clb.recordTime(3.0); // record for 3 seconds
-    auto R_GoGi = clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg,
-                                              zGroundRotDeg);
-    auto R_heading = clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    IMUCalibrator clb(model, &imuDriver, imuObservationOrder);
+    clb.recordNumOfSamples(1);
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
-
-    double samplingRate = 59;
-    double threshold = 0.0001;
-    SyncManager manager(samplingRate, threshold);
-
-    GRFMPrediction::Parameters parameters;
-    parameters.threshold = 0.01;
-    parameters.contact_plane_origin = Vec3(0.0, platform_offset, 0.0);
-    parameters.contact_plane_normal = UnitVec3(0, 1, 0);
-    IMUAccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfmPrediction(model, parameters, &detector);
-
-    // // position tracking
-    // PositionTracker rightTracker(59, 0.1);
-    // PositionTracker leftTracker(59, 0.1);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
@@ -140,6 +102,17 @@ void run() {
     ikFilterParam.calculateDerivatives = true;
     LowPassSmoothFilter ikFilter(ikFilterParam);
 
+    double samplingRate = 60;
+    double threshold = 0.0001;
+    SyncManager manager(samplingRate, threshold);
+
+    GRFMPrediction::Parameters parameters;
+    parameters.threshold = 0.1;
+    parameters.contact_plane_origin = Vec3(0);
+    parameters.contact_plane_normal = UnitVec3(0, 1, 0);
+    IMUAccelerationBasedPhaseDetector detector(model, parameters);
+    GRFMPrediction grfmPrediction(model, parameters, &detector);
+
     // visualizer
     BasicModelVisualizer visualizer(model);
     auto rightGRFDecorator = new ForceDecorator(Green, 0.001, 3);
@@ -148,32 +121,32 @@ void run() {
     visualizer.addDecorationGenerator(leftGRFDecorator);
 
     // get id of right and left calcn imus
-    auto calcn_r_id =
+    auto talus_r_id =
             std::distance(imuObservationOrder.begin(),
                           std::find(imuObservationOrder.begin(),
                                     imuObservationOrder.end(), "talus_r"));
-    auto calcn_l_id =
+    auto talus_l_id =
             std::distance(imuObservationOrder.begin(),
                           std::find(imuObservationOrder.begin(),
                                     imuObservationOrder.end(), "talus_l"));
-
     try { // main loop
         while (true) {
-            // get input from imus
-            auto imuDataFrame = driver.getFrame();
+            // get input from sensors
+            auto imuDataFrame = imuDriver.getFrameAsVector();
 
-            // synchronize data packets
-            manager.appendPack(driver.asPairsOfVectors(imuDataFrame));
+            if ((imuDriver.exc_ptr != nullptr)) throw std::runtime_error("End");
+
+            // synchronize data streams
+            manager.appendPack(imuDataFrame);
             auto pack = manager.getPack();
 
             if (pack.second.empty()) continue;
 
-            std::pair<double, std::vector<NGIMUData>> imuData;
-            imuData.first = pack.first;
-            imuData.second = driver.fromVector(pack.second[0]);
+            auto imuData =
+                    make_pair(pack.first, imuDriver.fromVector(pack.second[0]));
 
             // solve ik
-            auto pose = ik.solve(clb.transform(imuData, {Vec3(0), Vec3(0)}));
+            auto pose = ik.solve(clb.transform(imuData, {}));
 
             // filter
             auto ikFiltered = ikFilter.filter({pose.t, pose.q});
@@ -185,32 +158,22 @@ void run() {
 
             // grfm prediction
             const auto& acc_r =
-                    imuData.second.at(calcn_r_id).linear.acceleration;
+                    imuData.second.at(talus_r_id).linear.acceleration;
             const auto& acc_l =
-                    imuData.second.at(calcn_l_id).linear.acceleration;
+                    imuData.second.at(talus_l_id).linear.acceleration;
             detector.updDetector({imuData.first, acc_r, acc_l});
             auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
             visualizer.update(pose.q);
-            rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
-            leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
-
-            // record
-            qLogger.appendRow(pose.t - initTime, ~pose.q);
+            rightGRFDecorator->update(Vec3(0, 0, 0.5), grfmOutput[0].force);
+            leftGRFDecorator->update(Vec3(0, 0, -0.5), grfmOutput[1].force);
         }
-    } catch (std::exception& e) {
-        cout << e.what() << endl;
-        driver.stopListening();
-        listen.join();
+    } catch (std::exception& e) { cout << e.what() << endl; }
 
-        // store results
-        STOFileAdapter::write(
-                qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        // CSVFileAdapter::write(imuLogger,
-        //                       subjectDir +
-        //                       "experimental_data/ngimu_data.csv");
-    }
+    // store results
+    STOFileAdapter::write(qLogger,
+                          subjectDir + "real_time/inverse_kinematics/q.sto");
 }
 
 int main(int argc, char* argv[]) {

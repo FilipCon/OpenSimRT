@@ -1,23 +1,21 @@
 #pragma once
-#include "internal/IMUExports.h"
-#include <Simulation/Model/Model.h>
 #include "MahonyAHRS.h"
-#include "SignalProcessing.h"
-#include <vector>
 #include "NGIMUData.h"
+#include "SignalProcessing.h"
+#include "internal/IMUExports.h"
+
+#include <SimTKcommon/internal/Rotation.h>
+#include <Simulation/Model/Model.h>
+#include <vector>
 
 namespace OpenSimRT {
 class IMU_API PositionTracker {
  public:
-    PositionTracker(const OpenSim::Model& model,
-                    const std::vector<std::string>& observationOrder);
-    SimTK::Vec3
-    computePosition(const std::pair<double, std::vector<NGIMUData>>& data);
-    // SimTK::Vec3 computePosition(const SimTK::Vec3& vel, const double& t);
+    PositionTracker(const double&, const double&);
+    SimTK::Vec3 computeVelocity(const double&, const SimTK::Vec3&);
+    SimTK::Vec3 computePosition(const double&, const SimTK::Vec3&);
 
  private:
-    OpenSim::Model model;
-    std::vector<std::string> imuLabels;
     SimTK::ReferencePtr<NumericalIntegrator> accelerationIntegrator;
     SimTK::ReferencePtr<NumericalIntegrator> velocityIntegrator;
 
@@ -25,5 +23,10 @@ class IMU_API PositionTracker {
     SimTK::ReferencePtr<ButterworthFilter> accelerationLPFilter;
     SimTK::ReferencePtr<ButterworthFilter> velocityHPFilter;
     SimTK::ReferencePtr<ButterworthFilter> positionHPFilter;
+
+    double _threshold;
+    double _samplingFreq;
+
+    SimTK::Rotation R_GoGi;
 };
 } // namespace OpenSimRT

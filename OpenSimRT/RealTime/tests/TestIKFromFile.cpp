@@ -7,6 +7,7 @@
  * @author Dimitar Stanev <jimstanev@gmail.com>
  */
 #include "INIReader.h"
+#include "Measure.h"
 #include "OpenSimUtils.h"
 #include "Settings.h"
 #include "Simulation.h"
@@ -40,13 +41,13 @@ void run() {
     OpenSimUtils::removeActuators(model);
 
     // construct marker tasks from marker data (.trc)
-    IKTaskSet ikTaskSet(ikTaskSetFile);
+    // IKTaskSet ikTaskSet(ikTaskSetFile);
     MarkerData markerData(trcFile);
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> observationOrder;
-    InverseKinematics::createMarkerTasksFromIKTaskSet(
-            model, ikTaskSet, markerTasks, observationOrder);
-
+    // InverseKinematics::createMarkerTasksFromIKTaskSet(
+    //         model, ikTaskSet, markerTasks, observationOrder);
+    InverseKinematics::createMarkerTasksFromMarkerData(model, markerData, markerTasks, observationOrder);
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, markerTasks,
                          vector<InverseKinematics::IMUTask>{}, SimTK::Infinity,
@@ -66,15 +67,9 @@ void run() {
                 i, markerData, observationOrder, false);
 
         // perform ik
-        chrono::high_resolution_clock::time_point t1;
-        t1 = chrono::high_resolution_clock::now();
-
+        START_CHRONO();
         auto pose = ik.solve(frame);
-
-        chrono::high_resolution_clock::time_point t2;
-        t2 = chrono::high_resolution_clock::now();
-        sumDelayMS +=
-                chrono::duration_cast<chrono::milliseconds>(t2 - t1).count();
+        END_CHRONO();
 
         // visualize
         visualizer.update(pose.q);
@@ -83,9 +78,6 @@ void run() {
         qLogger.appendRow(pose.t, ~pose.q);
         // this_thread::sleep_for(chrono::milliseconds(10));
     }
-
-    cout << "Mean delay: " << (double) sumDelayMS / markerData.getNumFrames()
-         << " ms" << endl;
 
     // store results
     STOFileAdapter::write(qLogger,

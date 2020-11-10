@@ -1,13 +1,11 @@
-#ifndef GROUND_REACTION_FORCE_PREDICTION
-#define GROUND_REACTION_FORCE_PREDICTION
-
+#pragma once
 #include "internal/RealTimeExports.h"
 
 #include <OpenSim/Simulation/Model/Model.h>
 
 namespace OpenSimRT {
 
-class RealTime_API ContactForceBasedPhaseDetector;
+class RealTime_API GaitPhaseDetector;
 
 // helper function for updating opensim state
 template <typename T>
@@ -86,13 +84,15 @@ class RealTime_API GRFMPrediction {
     };
 
     struct Parameters {
-        double stance_threshold; // contact-force threshold
+        double threshold; // threshold
         SimTK::Vec3 contact_plane_origin;
         SimTK::UnitVec3 contact_plane_normal;
     } parameters;
 
     // constructor
-    GRFMPrediction(const OpenSim::Model&, const Parameters&);
+    GRFMPrediction() = default;
+    GRFMPrediction(const OpenSim::Model&, const Parameters&,
+                   GaitPhaseDetector*);
 
     // compute the ground reaction forces, moments and cop
     std::vector<Output> solve(const Input& input);
@@ -118,8 +118,8 @@ class RealTime_API GRFMPrediction {
     OpenSim::Model model;
     SimTK::State state;
 
-    // contact-force based phase detection
-    SimTK::ReferencePtr<ContactForceBasedPhaseDetector> gaitPhaseDetector;
+    // gait phase detection
+    SimTK::ReferencePtr<GaitPhaseDetector> gaitPhaseDetector;
     GaitPhaseState::GaitPhase gaitphase; // gait phase during simulation
 
     // station points forming the cop trajectory
@@ -141,4 +141,3 @@ class RealTime_API GRFMPrediction {
     void computeReactionPoint(SimTK::Vec3& rightPoint, SimTK::Vec3& leftPoint);
 };
 } // namespace OpenSimRT
-#endif // !GROUND_REACTION_FORCE_PREDICTION

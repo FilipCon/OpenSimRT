@@ -1,8 +1,10 @@
 #pragma once
 #include "InputDriver.h"
 #include "NGIMUData.h"
+
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <condition_variable>
+#include <exception>
 #include <thread>
 
 /**
@@ -26,6 +28,7 @@ class IMU_API NGIMUInputFromFileDriver : public InputDriver<NGIMUData> {
 
     OpenSim::TimeSeriesTable initializeLogger();
 
+    std::exception_ptr exc_ptr;
  private:
     OpenSim::TimeSeriesTable table;
     std::mutex _mutex;

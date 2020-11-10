@@ -187,9 +187,6 @@ void run() {
             leftInsoleDecorator->update(calcn_l_point_in_ground,
                                         l_force * Vec3(0, 1, 0));
 
-            // cout << std::setprecision(15) << pose.t << " " <<
-            // imuDataFrame.first
-            //      << " " << insoleDataFrame.timestamp << endl;
             // record
             qLogger.appendRow(pose.t - initTime, ~pose.q);
             // imuLogger.appendRow( - initTime,

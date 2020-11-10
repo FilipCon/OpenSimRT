@@ -304,10 +304,9 @@ StateSpaceFilter::FilterState StateSpaceFilter::filter(double t,
 
 IIRFilter::IIRFilter(int n, const Vector& aa, const Vector& bb,
                      InitialValuePolicy policy)
-        : n(n), a(aa), b(bb), iv(policy) {
-    b = b / a[0];
-    a = a / a[0];
-    a = a(1, a.size() - 1);
+        : n(n), iv(policy) {
+    a = aa(1, aa.size() - 1) / aa[0];
+    b = bb / aa[0];
     m = a.size();
     X = Matrix(n, b.size(), 0.0);
     Y = Matrix(n, a.size(), 0.0);
@@ -338,13 +337,13 @@ Vector IIRFilter::filter(const Vector& xn) {
 }
 
 ButterworthFilter::ButterworthFilter(
-        int filtOrder, double cutOffFreq, const FilterType& type,
+        int dim, int filtOrder, double cutOffFreq, const FilterType& type,
         const IIRFilter::InitialValuePolicy& policy) {
-    setupFilter(filtOrder, cutOffFreq, type, policy);
+    setupFilter(dim, filtOrder, cutOffFreq, type, policy);
 }
 
 void ButterworthFilter::setupFilter(
-        int filtOrder, double cutOffFreq, const FilterType& type,
+        int dim, int filtOrder, double cutOffFreq, const FilterType& type,
         const IIRFilter::InitialValuePolicy& policy) {
     double sf; // scaling factor
     Vector a;  // denominator coefficients
@@ -362,7 +361,7 @@ void ButterworthFilter::setupFilter(
     }
 
     // create iir filter with butter worth coefficients
-    iir = new IIRFilter(3, a, b, policy);
+    iir = new IIRFilter(dim, a, b, policy);
 }
 
 Vector ButterworthFilter::ccof_bwlp(const int& n) {
@@ -401,7 +400,7 @@ Vector ButterworthFilter::dcof_bwlp(const int& n, const double& fcf) {
     for (int k = 3; k <= n; ++k) dcof[k] = dcof[2 * k - 2];
     if (!dcof.size())
         THROW_EXCEPTION("Unable to calculate denominator coefficients");
-    return dcof;
+    return dcof(0, n + 1);
 }
 
 double ButterworthFilter::sf_bwlp(const int& n, const double& fcf) {
@@ -507,13 +506,18 @@ Vector NumericalDifferentiator::diff(double tn, const Vector& xn) {
     return dx;
 }
 
-NumericalIntegrator::NumericalIntegrator(const int& n) : x0(n, 0.0), t0(0.0) {}
+NumericalIntegrator::NumericalIntegrator(const int& n) {}
 NumericalIntegrator::NumericalIntegrator(const int& n,
                                          const Vector& initSignalValue,
                                          const double& initTime)
-        : x0(initSignalValue), t0(initTime) {}
+    : x0(initSignalValue), t0(initTime), _isSet(true) {}
 Vector NumericalIntegrator::integrate(const SimTK::Vector& xn,
                                       const double& t) {
+    if(!_isSet){
+        t0 = t;
+        x0 = xn;
+        _isSet = true;
+    }
     auto x = x0 + xn * (t - t0);
     t0 = t;
     x0 = x;
