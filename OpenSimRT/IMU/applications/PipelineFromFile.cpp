@@ -1,7 +1,7 @@
 #include "IMUCalibrator.h"
-#include "Measure.h"
 #include "INIReader.h"
 #include "InverseKinematics.h"
+#include "Measure.h"
 #include "MoticonReceiverFromFile.h"
 #include "NGIMUData.h"
 #include "NGIMUInputDriver.h"
@@ -57,24 +57,11 @@ void run() {
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center to track model position from imus
-    auto rCalcnMarker = Marker("calcn_r_marker",
-                               model.getBodySet().get("calcn_r"), Vec3(0));
-    auto lCalcnMarker = Marker("calcn_l_marker",
-                               model.getBodySet().get("calcn_l"), Vec3(0));
-    model.addMarker(&rCalcnMarker);
-    model.addMarker(&lCalcnMarker);
-    model.finalizeConnections();
-
-    State state = model.initSystem();
-    model.realizePosition(state);
-
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
     InverseKinematics::createMarkerTasksFromMarkerNames(
-        model, vector<string>{"calcn_r_marker", "calcn_l_marker"},
-            markerTasks, markerObservationOrder);
+            model, vector<string>{}, markerTasks, markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -93,8 +80,8 @@ void run() {
     // calibrator
     IMUCalibrator clb(model, &imuDriver, imuObservationOrder);
     clb.recordNumOfSamples(1);
-    auto R_GoGi = clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
-    auto R_heading = clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
@@ -105,29 +92,12 @@ void run() {
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
-    // position tracking
-    PositionTracker rightTracker(40, 0.2);
-    PositionTracker leftTracker(40, 0.2);
-
     // visualizer
     BasicModelVisualizer visualizer(model);
-    auto rightInsoleDecorator = new ForceDecorator(Green, 0.01, 3);
+    auto rightInsoleDecorator = new ForceDecorator(Green, 0.001, 3);
     visualizer.addDecorationGenerator(rightInsoleDecorator);
-    auto leftInsoleDecorator = new ForceDecorator(Green, 0.01, 3);
+    auto leftInsoleDecorator = new ForceDecorator(Green, 0.001, 3);
     visualizer.addDecorationGenerator(leftInsoleDecorator);
-
-    // get id of right and left calcn imus
-    auto calcn_r_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_r"));
-    auto calcn_l_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_l"));
-    TimeSeriesTable_<SimTK::Vec3> avp;
-    vector<string> columnNames{"p", "v", "a"};
-    avp.setColumnLabels(columnNames);
 
     try { // main loop
         while (true) {
@@ -135,7 +105,8 @@ void run() {
             auto imuDataFrame = imuDriver.getFrameAsVector();
             auto insoleDataFrame = insoleDriver.getFrameAsVector();
 
-            if( (imuDriver.exc_ptr != nullptr) || insoleDriver.exc_ptr != nullptr)
+            if ((imuDriver.exc_ptr != nullptr) ||
+                insoleDriver.exc_ptr != nullptr)
                 throw std::runtime_error("End");
 
             // synchronize data streams
@@ -151,24 +122,8 @@ void run() {
             moticonData.timestamp = pack.first;
             moticonData.fromVector(pack.second[1]);
 
-            // compute velocity and position from acceleration
-            auto acc_r = imuData.second.at(calcn_r_id).linear.acceleration;
-            auto acc_l = imuData.second.at(calcn_l_id).linear.acceleration;
-            auto vel_r = rightTracker.computeVelocity(imuData.first, acc_r);
-            auto vel_l = leftTracker.computeVelocity(imuData.first, acc_l);
-            auto pos_r = rightTracker.computePosition(imuData.first, vel_r);
-            auto pos_l = leftTracker.computePosition(imuData.first, vel_l);
-
-            // rotate values
-            pos_r =  R_heading * R_GoGi *pos_r;
-            pos_l =  R_heading * R_GoGi *pos_l;
-
-            avp.appendRow(pack.first, {pos_r, vel_r, acc_r});
-
             // solve ik
-            auto temp = clb.transform(imuData, {pos_r, pos_l});
-
-            auto pose = ik.solve(temp);
+            auto pose = ik.solve(clb.transform(imuData, {}));
 
             // insole aliases
             const auto& r_cop = moticonData.right.cop;
@@ -190,25 +145,8 @@ void run() {
                                          r_force * Vec3(0, 1, 0));
             leftInsoleDecorator->update(calcn_l_point_in_ground,
                                         l_force * Vec3(0, 1, 0));
-
-            // record
-            // qLogger.appendRow(pose.t, ~pose.q);
-            // imuLogger.appendRow(pack.first, ~pack.second[0]);
-            // insoleLogger.appendRow(pack.first, ~pack.second[1]);
-
-            // // dummy delay to simulate real time
-            // std::this_thread::sleep_for(std::chrono::milliseconds(13));
         }
     } catch (std::exception& e) { cout << e.what() << endl; }
-
-    // // store results
-    STOFileAdapter::write(qLogger,
-                          subjectDir + "real_time/inverse_kinematics/q.sto");
-    CSVFileAdapter::write(avp.flatten(), subjectDir + "real_time/avp.csv");
-    // CSVFileAdapter::write(imuLogger,
-    //                       subjectDir + "real_time/sync/ngimu_data.csv");
-    // CSVFileAdapter::write(insoleLogger,
-    //                       subjectDir + "real_time/sync/moticon_data.csv");
 }
 
 int main(int argc, char* argv[]) {

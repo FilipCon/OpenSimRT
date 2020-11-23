@@ -1,3 +1,4 @@
+#include "ExternalForceBasedPhaseDetector.h"
 #include "IMUCalibrator.h"
 #include "INIReader.h"
 #include "MoticonReceiver.h"
@@ -57,6 +58,11 @@ void run() {
     auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
     auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
 
+    auto memory = ini.getInteger(section, "MEMORY", 0);
+    auto cutoffFreq = ini.getReal(section, "CUTOFF_FREQ", 0);
+    auto delay = ini.getInteger(section, "DELAY", 0);
+    auto splineOrder = ini.getInteger(section, "SPLINE_ORDER", 0);
+
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
@@ -66,11 +72,10 @@ void run() {
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center to track model position from imus
+    // add marker to pelvis center
     auto pelvisMarker =
             Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
     model.addMarker(&pelvisMarker);
-    model.finalizeConnections();
 
     State state = model.initSystem();
     model.realizePosition(state);
@@ -115,30 +120,40 @@ void run() {
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
     auto qLogger = ik.initializeLogger();
 
+    // setup filters
+    LowPassSmoothFilter::Parameters ikFilterParam;
+    ikFilterParam.numSignals = model.getNumCoordinates();
+    ikFilterParam.memory = memory;
+    ikFilterParam.delay = delay;
+    ikFilterParam.cutoffFrequency = cutoffFreq;
+    ikFilterParam.splineOrder = splineOrder;
+    ikFilterParam.calculateDerivatives = true;
+    LowPassSmoothFilter ikFilter(ikFilterParam);
+
+    ExternalForceBasedPhaseDetector::Parameters detectorParameters;
+    ExternalForceBasedPhaseDetector detector(detectorParameters);
+    detectorParameters.threshold = 100;
+    detectorParameters.consecutive_values = 5;
+    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
+                                  &detector);
+
+    // sensor data synchronization
     double samplingRate = 30;
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
-    // // position tracking
-    // PositionTracker pt = PositionTracker(model, imuObservationOrder);
-
     // visualizer
     BasicModelVisualizer visualizer(model);
-    auto rightInsoleDecorator = new ForceDecorator(Green, 0.01, 3);
-    visualizer.addDecorationGenerator(rightInsoleDecorator);
-    auto leftInsoleDecorator = new ForceDecorator(Green, 0.01, 3);
-    visualizer.addDecorationGenerator(leftInsoleDecorator);
-
-    TimeSeriesTable avp;
-    vector<string> columnNames{"px", "py", "pz"};
-    avp.setColumnLabels(columnNames);
+    auto rightGRFDecorator = new ForceDecorator(Green, 0.001, 3);
+    visualizer.addDecorationGenerator(rightGRFDecorator);
+    auto leftGRFDecorator = new ForceDecorator(Green, 0.001, 3);
+    visualizer.addDecorationGenerator(leftGRFDecorator);
 
     try { // main loop
         while (true) {
             // get input from imus
             auto imuDataFrame = driver.getFrame();
-            auto insoleDataFrame =
-                    std::async(&MoticonReceiver::receiveData, &mt).get();
+            auto insoleDataFrame = mt.receiveData();
 
             // change frame representation
             const auto imuDataAsPairs = driver.asPairsOfVectors(imuDataFrame);
@@ -149,8 +164,9 @@ void run() {
             manager.appendPack(imuDataAsPairs, insoleDataAsPairs);
             auto pack = manager.getPack();
 
-            if (SimTK::isInf(pack.first)) continue;
+            if (pack.second.empty()) continue;
 
+            // retrieve original representation of input data
             std::pair<double, std::vector<NGIMUData>> imuData;
             imuData.first = pack.first;
             imuData.second = driver.fromVector(pack.second[0]);
@@ -159,21 +175,26 @@ void run() {
             moticonData.timestamp = pack.first;
             moticonData.fromVector(pack.second[1]);
 
-            // // estimate position from IMUs
-            // auto pos = pt.computePosition(imuDataFrame) + height;
-
-            Vec3 pos = Vec3(0, 0, 0) + height;
-
             // solve ik
-            auto pose = ik.solve(clb.transform(imuData, {pos}));
+            auto pose = ik.solve(clb.transform(imuData, {height}));
 
-            const auto& r_cop = insoleDataFrame.right.cop;
-            const auto& r_force = insoleDataFrame.right.totalForce;
-            const auto& l_cop = insoleDataFrame.left.cop;
-            const auto& l_force = insoleDataFrame.left.totalForce;
+            // filter
+            auto ikFiltered = ikFilter.filter({pose.t, pose.q});
+            auto q = ikFiltered.x;
+            auto qDot = ikFiltered.xDot;
+            auto qDDot = ikFiltered.xDDot;
+
+            if (!ikFiltered.isValid) continue;
+
+            // grfm prediction
+            detector.updDetector({moticonData.timestamp,
+                                  moticonData.right.totalForce,
+                                  moticonData.left.totalForce});
+            auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
-            visualizer.update(pose.q);
+            const auto& r_cop = moticonData.right.cop;
+            const auto& l_cop = moticonData.left.cop;
             Vec3 calcn_r_point_in_ground;
             Vec3 calcn_l_point_in_ground;
             visualizer.expressPositionInGround("calcn_r_insole",
@@ -182,18 +203,18 @@ void run() {
             visualizer.expressPositionInGround("calcn_l_insole",
                                                Vec3(l_cop[0], 0, -l_cop[1]),
                                                calcn_l_point_in_ground);
-            rightInsoleDecorator->update(calcn_r_point_in_ground,
-                                         r_force * Vec3(0, 1, 0));
-            leftInsoleDecorator->update(calcn_l_point_in_ground,
-                                        l_force * Vec3(0, 1, 0));
+            visualizer.update(pose.q);
+            rightGRFDecorator->update(calcn_r_point_in_ground,
+                                      grfmOutput[0].force);
+            leftGRFDecorator->update(calcn_l_point_in_ground,
+                                     grfmOutput[1].force);
 
             // record
             qLogger.appendRow(pose.t - initTime, ~pose.q);
-            // imuLogger.appendRow( - initTime,
-            //                     ~driver.asVector(imuDataFrame));
-            mtLogger.appendRow(insoleDataFrame.timestamp - initTime,
-                               ~insoleDataFrame.asVector());
-            // avp.appendRow(pose.t - initTime, ~Vector(pos));
+            imuLogger.appendRow(imuData.first - initTime,
+                                ~driver.asVector(imuData.second));
+            mtLogger.appendRow(moticonData.timestamp - initTime,
+                               ~moticonData.asVector());
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;
@@ -203,14 +224,10 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        // CSVFileAdapter::write(imuLogger,
-        //                       subjectDir +
-        //                       "experimental_data/ngimu_data.csv");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
         CSVFileAdapter::write(mtLogger,
                               subjectDir + "experimental_data/moticon.csv");
-        // CSVFileAdapter::write(avp,
-        //                       subjectDir +
-        //                       "experimental_data/estimates.csv");
     }
 }
 

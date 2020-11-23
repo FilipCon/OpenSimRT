@@ -1,7 +1,14 @@
 #pragma once
+#include "Exception.h"
 #include "internal/RealTimeExports.h"
 
 #include <OpenSim/Simulation/Model/Model.h>
+#include <SimTKcommon/Scalar.h>
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/Rotation.h>
+#include <SimTKcommon/internal/UnitVec.h>
+#include <initializer_list>
+#include <stdexcept>
 
 namespace OpenSimRT {
 
@@ -12,7 +19,9 @@ template <typename T>
 void updateState(const T& input, const OpenSim::Model& model,
                  SimTK::State& state, const SimTK::Stage& stage) {
     const auto& coordinateSet = model.getCoordinatesInMultibodyTreeOrder();
-    for (int i = 0; i < coordinateSet.size(); ++i) {
+    if (coordinateSet.size() != input.q.size())
+        THROW_EXCEPTION("Wrong dimensions");
+    for (size_t i = 0; i < coordinateSet.size(); ++i) {
         coordinateSet[i]->setValue(state, input.q[i]);
         coordinateSet[i]->setSpeedValue(state, input.qDot[i]);
     }
@@ -22,12 +31,12 @@ void updateState(const T& input, const OpenSim::Model& model,
 
 // basic sliding window implementation
 template <typename T> struct SlidingWindow {
-    std::vector<T> data;  // sliding window data
-    std::size_t capacity; // sliding window size
+    SimTK::Array_<T> data; // sliding window data
+    std::size_t capacity;  // sliding window size
 
     // set initial values
-    void init(std::vector<T>&& aData) {
-        data = std::forward<std::vector<T>>(aData);
+    void init(SimTK::Array_<T>&& aData) {
+        data = std::forward<SimTK::Array_<T>>(aData);
         capacity = data.size();
     }
 
@@ -47,6 +56,28 @@ template <typename T> struct SlidingWindow {
     T mean() {
         return 1.0 * std::accumulate(data.begin(), data.end(), T()) /
                int(data.size());
+    }
+
+    bool equal(const T& x) {
+        for (const auto& e : data) {
+            if (e != x) return false;
+        }
+        return true;
+    }
+
+    bool nFirstEqual(const T& x, const size_t& n) const {
+        if (n > data.size()) throw std::runtime_error("Wrong input size");
+        for (size_t i = 0; i < n; ++i) {
+            if (data[i] != x) return false;
+        }
+        return true;
+    }
+    bool nLastEqual(const T& x, const size_t& n) const {
+        if (n > data.size()) throw std::runtime_error("Wrong input size");
+        for (size_t i = 0; i < n; ++i) {
+            if (data[data.size() - i - 1] != x) return false;
+        }
+        return true;
     }
 };
 /*******************************************************************************/
@@ -84,9 +115,9 @@ class RealTime_API GRFMPrediction {
     };
 
     struct Parameters {
-        double threshold; // threshold
-        SimTK::Vec3 contact_plane_origin;
-        SimTK::UnitVec3 contact_plane_normal;
+        double threshold = 0; // threshold
+        SimTK::Vec3 plane_origin = SimTK::Vec3(0);
+        SimTK::Vec3 plane_normal = SimTK::Vec3(0, 1, 0);
     } parameters;
 
     // constructor
@@ -127,6 +158,11 @@ class RealTime_API GRFMPrediction {
     SimTK::ReferencePtr<OpenSim::Station> heelStationL;
     SimTK::ReferencePtr<OpenSim::Station> toeStationR;
     SimTK::ReferencePtr<OpenSim::Station> toeStationL;
+
+    SimTK::Rotation computeGaitDirectionRotation(const std::string& bodyName);
+    void computeTotalReactionComponents(const Input& input,
+                                        SimTK::Vec3& totalReactionForce,
+                                        SimTK::Vec3& totalReactionMoment);
 
     // separate total reaction into R/L foot reaction components
     void seperateReactionComponents(

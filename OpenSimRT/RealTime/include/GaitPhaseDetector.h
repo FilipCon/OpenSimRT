@@ -14,16 +14,23 @@ class RealTime_API GaitPhaseDetector {
     using DetectEventFunction =
             std::function<bool(const SlidingWindow<GaitPhaseState::LegPhase>&)>;
 
-    GaitPhaseDetector() = default;
-    GaitPhaseDetector(const OpenSim::Model& otherModel,
-                      const GRFMPrediction::Parameters& otherParameters);
+    struct TimeConstant {
+        double right = -1;
+        double left = -1;
+    };
+
+    GaitPhaseDetector();
     virtual ~GaitPhaseDetector() = default;
 
     bool isDetectorReady();
     GaitPhaseState::GaitPhase getPhase() { return gaitPhase; };
     const GaitPhaseState::LeadingLeg getLeadingLeg() { return leadingLeg; };
-    const double getHeelStrikeTime() { return Ths; };
-    const double getToeOffTime() { return Tto; };
+    const double getHeelStrikeTime() {
+        return (Ths.right > Ths.left) ? Ths.right : Ths.left;
+    };
+    const double getToeOffTime() {
+        return (Tto.right > Tto.left) ? Tto.right : Tto.left;
+    };
     const double getDoubleSupportDuration() { return Tds; };
     const double getSingleSupportDuration() { return Tss; };
 
@@ -45,12 +52,10 @@ class RealTime_API GaitPhaseDetector {
 
     // time constants. DS and SS time-period, and exact time of HS and TO
     // events
-    double Ths, Tto, Tds, Tss;
+    TimeConstant Ths, Tto;
+    double Tds, Tss;
 
     // current gait phase
-    OpenSim::Model model;
-    SimTK::State state;
-    GRFMPrediction::Parameters parameters;
     GaitPhaseState::GaitPhase gaitPhase;
 };
 

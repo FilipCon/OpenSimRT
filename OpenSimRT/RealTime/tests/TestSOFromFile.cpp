@@ -18,6 +18,7 @@
 
 #include <OpenSim/Common/STOFileAdapter.h>
 #include <OpenSim/Simulation/Model/Muscle.h>
+#include <SimTKcommon/internal/BigMatrix.h>
 #include <iostream>
 
 using namespace std;
@@ -93,7 +94,7 @@ void run() {
         chrono::high_resolution_clock::time_point t1;
         t1 = chrono::high_resolution_clock::now();
 
-        auto soOutput = so.solve({t, q, ~tau});
+        auto soOutput = so.solve({t, q, Vector(q.size(), 0.0), ~tau}); // TODO add qDot
 
         chrono::high_resolution_clock::time_point t2;
         t2 = chrono::high_resolution_clock::now();

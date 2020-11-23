@@ -1,4 +1,4 @@
-#include "IMUAccelerationBasedPhaseDetector.h"
+#include "AccelerationBasedPhaseDetector.h"
 #include "IMUCalibrator.h"
 #include "INIReader.h"
 #include "InverseKinematics.h"
@@ -106,25 +106,27 @@ void run() {
     // calibrator
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.recordTime(3.0); // record for 3 seconds
-    auto R_GoGi = clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg,
-                                              zGroundRotDeg);
-    auto R_heading = clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
+    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     double samplingRate = 59;
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
-    GRFMPrediction::Parameters parameters;
-    parameters.threshold = 0.01;
-    parameters.contact_plane_origin = Vec3(0.0, platform_offset, 0.0);
-    parameters.contact_plane_normal = UnitVec3(0, 1, 0);
-    IMUAccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfmPrediction(model, parameters, &detector);
-
-    // // position tracking
-    // PositionTracker rightTracker(59, 0.1);
-    // PositionTracker leftTracker(59, 0.1);
+    AccelerationBasedPhaseDetector::Parameters parameters;
+    parameters.acc_threshold = 6;
+    parameters.vel_threshold = 2;
+    parameters.consecutive_values = 5;
+    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
+    parameters.filterParameters.memory = 20;
+    parameters.filterParameters.delay = 5;
+    parameters.filterParameters.cutoffFrequency = 1;
+    parameters.filterParameters.splineOrder = 3;
+    parameters.filterParameters.calculateDerivatives = true;
+    AccelerationBasedPhaseDetector detector(model, parameters);
+    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
+                                  &detector);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
     InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
@@ -146,16 +148,6 @@ void run() {
     visualizer.addDecorationGenerator(rightGRFDecorator);
     auto leftGRFDecorator = new ForceDecorator(Green, 0.001, 3);
     visualizer.addDecorationGenerator(leftGRFDecorator);
-
-    // get id of right and left calcn imus
-    auto calcn_r_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_r"));
-    auto calcn_l_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_l"));
 
     try { // main loop
         while (true) {
@@ -184,11 +176,7 @@ void run() {
             if (!ikFiltered.isValid) continue;
 
             // grfm prediction
-            const auto& acc_r =
-                    imuData.second.at(calcn_r_id).linear.acceleration;
-            const auto& acc_l =
-                    imuData.second.at(calcn_l_id).linear.acceleration;
-            detector.updDetector({imuData.first, acc_r, acc_l});
+            detector.updDetector({pose.t, q, qDot, qDDot});
             auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
@@ -207,9 +195,8 @@ void run() {
         // store results
         STOFileAdapter::write(
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
-        // CSVFileAdapter::write(imuLogger,
-        //                       subjectDir +
-        //                       "experimental_data/ngimu_data.csv");
+        CSVFileAdapter::write(imuLogger,
+                              subjectDir + "experimental_data/ngimu_data.csv");
     }
 }
 

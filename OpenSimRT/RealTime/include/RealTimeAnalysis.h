@@ -1,7 +1,6 @@
 #ifndef REAL_TIME_ANALYSIS_H
 #define REAL_TIME_ANALYSIS_H
 
-#include "CircularBuffer.h"
 #include "OpenSimUtils.h"
 #include "SignalProcessing.h"
 #include "Simulation.h"
@@ -110,7 +109,7 @@ class RealTime_API RealTimeAnalysis {
     void acquisition();
     void processing();
 
-    Output& getResults();
+    Output getResults();
 
  private:
     OpenSim::Model model;

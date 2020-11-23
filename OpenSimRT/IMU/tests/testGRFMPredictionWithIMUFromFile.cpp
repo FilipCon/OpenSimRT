@@ -1,6 +1,7 @@
-#include "IMUAccelerationBasedPhaseDetector.h"
+#include "AccelerationBasedPhaseDetector.h"
 #include "IMUCalibrator.h"
 #include "INIReader.h"
+#include "InverseDynamics.h"
 #include "InverseKinematics.h"
 #include "Measure.h"
 #include "MoticonReceiverFromFile.h"
@@ -77,6 +78,9 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
+    auto grfRightLogger = ExternalWrench::initializeLogger();
+    auto grfLeftLogger = ExternalWrench::initializeLogger();
+
     // ngimu input data driver from file
     NGIMUInputFromFileDriver imuDriver(ngimuDataFile, 60);
     imuDriver.startListening();
@@ -106,12 +110,19 @@ void run() {
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
-    GRFMPrediction::Parameters parameters;
-    parameters.threshold = 0.1;
-    parameters.contact_plane_origin = Vec3(0);
-    parameters.contact_plane_normal = UnitVec3(0, 1, 0);
-    IMUAccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfmPrediction(model, parameters, &detector);
+    AccelerationBasedPhaseDetector::Parameters parameters;
+    parameters.acc_threshold = 6;
+    parameters.vel_threshold = 2;
+    parameters.consecutive_values = 5;
+    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
+    parameters.filterParameters.memory = 20;
+    parameters.filterParameters.delay = 5;
+    parameters.filterParameters.cutoffFrequency = 1;
+    parameters.filterParameters.splineOrder = 3;
+    parameters.filterParameters.calculateDerivatives = true;
+    AccelerationBasedPhaseDetector detector(model, parameters);
+    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
+                                  &detector);
 
     // visualizer
     BasicModelVisualizer visualizer(model);
@@ -120,15 +131,6 @@ void run() {
     auto leftGRFDecorator = new ForceDecorator(Green, 0.001, 3);
     visualizer.addDecorationGenerator(leftGRFDecorator);
 
-    // get id of right and left calcn imus
-    auto talus_r_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_r"));
-    auto talus_l_id =
-            std::distance(imuObservationOrder.begin(),
-                          std::find(imuObservationOrder.begin(),
-                                    imuObservationOrder.end(), "talus_l"));
     try { // main loop
         while (true) {
             // get input from sensors
@@ -157,23 +159,30 @@ void run() {
             if (!ikFiltered.isValid) continue;
 
             // grfm prediction
-            const auto& acc_r =
-                    imuData.second.at(talus_r_id).linear.acceleration;
-            const auto& acc_l =
-                    imuData.second.at(talus_l_id).linear.acceleration;
-            detector.updDetector({imuData.first, acc_r, acc_l});
+            detector.updDetector({pose.t, q, qDot, qDDot});
             auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
-            visualizer.update(pose.q);
-            rightGRFDecorator->update(Vec3(0, 0, 0.5), grfmOutput[0].force);
-            leftGRFDecorator->update(Vec3(0, 0, -0.5), grfmOutput[1].force);
+            visualizer.update(q);
+            rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
+            leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
+
+            // log output
+            grfRightLogger.appendRow(grfmOutput[0].t,
+                                     ~grfmOutput[0].asVector());
+            grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
         }
     } catch (std::exception& e) { cout << e.what() << endl; }
 
     // store results
     STOFileAdapter::write(qLogger,
                           subjectDir + "real_time/inverse_kinematics/q.sto");
+    STOFileAdapter::write(
+            grfRightLogger,
+            subjectDir + "/real_time/grfm_prediction/wrench_right.sto");
+    STOFileAdapter::write(grfLeftLogger,
+                          subjectDir +
+                                  "/real_time/grfm_prediction/wrench_left.sto");
 }
 
 int main(int argc, char* argv[]) {

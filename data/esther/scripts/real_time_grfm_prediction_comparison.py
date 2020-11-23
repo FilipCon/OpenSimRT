@@ -1,3 +1,4 @@
+##
 import os
 import numpy as np
 import pandas as pd
@@ -5,7 +6,6 @@ from utils import read_from_storage, rmse_metric, plot_sto_file, annotate_plot
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-##
 # data
 
 subject_dir = os.path.abspath('../TR_3/')
@@ -25,7 +25,7 @@ if not (os.path.isfile(experiment_grf_file) and
     raise RuntimeError('required files do not exist')
 
 
-##
+#
 # read data
 
 experiment_grf = read_from_storage(experiment_grf_file)
@@ -47,7 +47,7 @@ left_wrench.p_x = left_wrench.p_x.replace(0.0, float('nan'))
 left_wrench.p_y = left_wrench.p_y.replace(0.0, float('nan'))
 left_wrench.p_z = left_wrench.p_z.replace(0.0, float('nan'))
 
-
+##
 def plotXYZ(gt_data_frame, est_data_frame, id_gt, id_est, hs_events, to_events, title, y_label):
     ''' Helper function for plotting forces/moments/cop
     '''

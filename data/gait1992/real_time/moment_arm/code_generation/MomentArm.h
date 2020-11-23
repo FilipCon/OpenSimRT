@@ -11,10 +11,11 @@
 #endif
 
 #ifdef __cplusplus
-MomentArm_API SimTK::Matrix calcMomentArm(const SimTK::Vector& q) OPTIMIZATION;
-MomentArm_API std::vector<std::string> getModelMuscleSymbolicOrder() OPTIMIZATION;
-MomentArm_API std::vector<std::string> getModelCoordinateSymbolicOrder() OPTIMIZATION;
-
+extern "C" {
+    MomentArm_API SimTK::Matrix calcMomentArm(const SimTK::Vector& q) OPTIMIZATION;
+    MomentArm_API std::vector<std::string> getModelMuscleSymbolicOrder() OPTIMIZATION;
+    MomentArm_API std::vector<std::string> getModelCoordinateSymbolicOrder() OPTIMIZATION;
+}
 #endif
 
 #endif

@@ -1,11 +1,13 @@
 #include "ContactForceBasedPhaseDetector.h"
+#include "GRFMPrediction.h"
+#include "GaitPhaseDetector.h"
 #include "INIReader.h"
 #include "OpenSimUtils.h"
-#include "GaitPhaseDetector.h"
 #include "Settings.h"
 #include "SignalProcessing.h"
 #include "Simulation.h"
 #include "Utils.h"
+#include "AccelerationBasedPhaseDetector.h"
 #include "Visualization.h"
 
 #include <OpenSim/Common/STOFileAdapter.h>
@@ -61,7 +63,6 @@ void run() {
 
     // setup model
     Model model(modelFile);
-    model.initSystem();
 
     // setup external forces parameters
     ExternalWrench::Parameters grfRightFootPar{
@@ -97,12 +98,24 @@ void run() {
     LowPassSmoothFilter ikFilter(ikFilterParam);
 
     // setup grfm prediction
-    GRFMPrediction::Parameters parameters;
-    parameters.threshold = 100;
-    parameters.contact_plane_origin = Vec3(0.0, platform_offset, 0.0);
-    parameters.contact_plane_normal = UnitVec3(0, 1, 0);
-    auto detector = ContactForceBasedPhaseDetector(model, parameters);
-    GRFMPrediction grfm(model, parameters, &detector);
+    // GRFMPrediction::Parameters parameters;
+    // parameters.threshold = 100;
+    // parameters.plane_origin = Vec3(0.0, platform_offset, 0.0);
+    // parameters.plane_normal = Vec3(0, 1, 0);
+    // auto detector = ContactForceBasedPhaseDetector(model, parameters);
+    // GRFMPrediction grfm(model, parameters, &detector);
+    AccelerationBasedPhaseDetector::Parameters parameters;
+    parameters.acc_threshold = 10;
+    parameters.vel_threshold = 2.2;
+    parameters.consecutive_values = 5;
+    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
+    parameters.filterParameters.memory = 10;
+    parameters.filterParameters.delay = 5;
+    parameters.filterParameters.cutoffFrequency = 1;
+    parameters.filterParameters.splineOrder = 3;
+    parameters.filterParameters.calculateDerivatives = true;
+    AccelerationBasedPhaseDetector detector(model, parameters);
+    GRFMPrediction grfm(model, GRFMPrediction::Parameters(), &detector);
 
     // initialize id and logger
     InverseDynamics id(model, wrenchParameters);

@@ -20,5 +20,9 @@ class RealTime_API ContactForceBasedPhaseDetector : public GaitPhaseDetector {
     // contact force elements added to a copy of the original model
     SimTK::ReferencePtr<OpenSim::HuntCrossleyForce> rightContactForce;
     SimTK::ReferencePtr<OpenSim::HuntCrossleyForce> leftContactForce;
+
+    OpenSim::Model model;
+    SimTK::State state;
+    GRFMPrediction::Parameters parameters;
 };
 } // namespace OpenSimRT

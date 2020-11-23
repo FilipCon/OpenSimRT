@@ -167,7 +167,6 @@ void RealTimeAnalysis::processing() {
             auto id = inverseDynamics->solve({filteredData.t, filteredData.q,
                                               filteredData.qd, filteredData.qdd,
                                               filteredData.externalWrenches});
-
             // solve so and jr
             if (parameters.solveMuscleOptimization) {
                 auto so = muscleOptimization->solve({filteredData.t,
@@ -233,7 +232,7 @@ void RealTimeAnalysis::processing() {
     }
 }
 
-RealTimeAnalysis::Output& RealTimeAnalysis::getResults() {
+RealTimeAnalysis::Output RealTimeAnalysis::getResults() {
     unique_lock<mutex> locker(_mu);
     _cond.wait(locker, [&]() { return _notifyParentThread; });
     _notifyParentThread = false;

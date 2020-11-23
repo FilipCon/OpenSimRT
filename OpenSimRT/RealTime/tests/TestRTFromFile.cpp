@@ -96,10 +96,10 @@ void run(char const* name) {
     MarkerData markerData(trcFile);
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> observationOrder;
-    // createMarkerTasksFromMarkerData(model, markerData, markerTasks,
-    // observationOrder);
-    InverseKinematics::createMarkerTasksFromIKTaskSet(
-            model, ikTaskSet, markerTasks, observationOrder);
+    InverseKinematics::createMarkerTasksFromMarkerData(
+            model, markerData, markerTasks, observationOrder);
+    // InverseKinematics::createMarkerTasksFromIKTaskSet(
+    //         model, ikTaskSet, markerTasks, observationOrder);
 
     // read external forces
     Storage grfMotion(grfMotFile);
@@ -186,8 +186,6 @@ void run(char const* name) {
 
         cout << "Writing results in file..." << endl;
         // pipeline.exportResults(subjectDir + "real_time/pipeline");
-
-        throw(e);
     }
 }
 

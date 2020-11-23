@@ -68,20 +68,21 @@ template <typename ETX = double> class Common_API SyncManager {
         auto t2 = t + delay * (1 / _samplingRate);
 
         // create re-sampled entry @ time 't'
-        auto rowNew = createRow(t);
-        if (isVectorFinite(rowNew)) {
+        auto newRow = createRow(t);
+        bool isNewRowFinite = isVectorFinite(newRow);
+        if (isNewRowFinite) {
             if (std::find(v.begin(), v.end(), t) == v.end()) {
-                _table.appendRow(t, ~rowNew);
+                _table.appendRow(t, ~newRow);
                 reorderTable();
             } else {
-                setRow(t, ~rowNew);
+                setRow(t, ~newRow);
             }
         }
 
         // initialize output
         size_t columnId = 0;
         std::vector<SimTK::Vector_<ETX>> pack;
-        if (isVectorFinite(rowNew) && (t2 <= v.back()) && !SimTK::isInf(t)) {
+        if (isNewRowFinite && (t2 <= v.back()) && !SimTK::isInf(t)) {
             // delete all rows from the orifinal table up to the _currentTime
             // entry. We need first to create a copy of the independentColumn
             auto v_cpy(v);

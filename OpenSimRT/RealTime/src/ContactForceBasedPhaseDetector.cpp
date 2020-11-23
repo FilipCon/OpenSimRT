@@ -1,5 +1,6 @@
 #include "ContactForceBasedPhaseDetector.h"
 
+#include "Exception.h"
 #include "GRFMPrediction.h"
 
 #include <OpenSim/Simulation/Model/ContactHalfSpace.h>
@@ -7,6 +8,8 @@
 #include <OpenSim/Simulation/SimbodyEngine/WeldJoint.h>
 #include <SimTKcommon/internal/Stage.h>
 #include <Simulation/Model/Model.h>
+#include <optional>
+#include <ostream>
 
 using namespace std;
 using namespace OpenSim;
@@ -16,8 +19,8 @@ using namespace SimTK;
 ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
         const Model& otherModel,
         const GRFMPrediction::Parameters& otherParameters)
-        : GaitPhaseDetector(otherModel, otherParameters) {
-
+        : GaitPhaseDetector(), model(*otherModel.clone()),
+          parameters(otherParameters) {
     // add elements to a copy of the original model....
 
     // platform
@@ -27,7 +30,7 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     // weld joint
     auto platformToGround = new WeldJoint(
             "PlatformToGround", model.getGround(), Vec3(0), Vec3(0), *platform,
-            -parameters.contact_plane_origin, Vec3(0));
+            -parameters.plane_origin, Vec3(0));
     model.addJoint(platformToGround);
 
     // contact half-space
@@ -103,12 +106,13 @@ void ContactForceBasedPhaseDetector::updDetector(
 
     // compute contact forces
     auto rightContactWrench = rightContactForce.get()->getRecordValues(state);
-    Vec3 rightContactForce(-rightContactWrench[0], -rightContactWrench[1],
-                           -rightContactWrench[2]);
+    Vec3 rightContactForce(-rightContactWrench.get(0),
+                           -rightContactWrench.get(1),
+                           -rightContactWrench.get(2));
 
-    auto leftontactWrench = leftContactForce.get()->getRecordValues(state);
-    Vec3 leftContactForce(-leftontactWrench[0], -leftontactWrench[1],
-                          -leftontactWrench[2]);
+    auto leftContactWrench = leftContactForce.get()->getRecordValues(state);
+    Vec3 leftContactForce(-leftContactWrench.get(0), -leftContactWrench.get(1),
+                          -leftContactWrench.get(2));
 
     // update detector internal state
     updDetectorState(state.getTime(),
