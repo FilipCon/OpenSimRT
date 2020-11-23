@@ -215,7 +215,8 @@ GRFMPrediction::computeGaitDirectionRotation(const std::string& bodyName) {
             body.getMobilizedBodyIndex());
     const auto& R_GB = mob.getBodyTransform(state).R();
     gaitDirectionBuffer.insert((~R_GB).col(0).asVec3());
-    auto gaitDirection = projectionOnPlane(gaitDirectionBuffer.mean(), Vec3(0),
+    auto meanDirection = gaitDirectionBuffer.mean();
+    auto gaitDirection = projectionOnPlane(meanDirection, Vec3(0),
                                            Vec3(0, 1, 0));
 
     // rotation about the vertical axis to transform the reaction components

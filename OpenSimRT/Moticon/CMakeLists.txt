@@ -6,11 +6,7 @@ find_library(oscpack
   NAMES oscpack
   PATHS ${OSCPACK_DIR}/lib
   PATH_SUFFIXES lib)
-set(OSCPACK_LIBRARIES ${oscpack} Common)
-
-if(WIN32)
-  set(DEPENDENCY_LIBRARIES ${DEPENDENCY_LIBRARIES} Ws2_32 winmm)
-endif()
+set(OSCPACK_LIBRARIES ${oscpack})
 
 # files
 file(GLOB includes include/*.h)
@@ -24,7 +20,11 @@ message(${sources})
 include_directories(include/)
 include_directories(../Common/include/)
 include_directories(${OSCPACK_INCLUDE_DIRS})
-set(DEPENDENCY_LIBRARIES ${OpenSim_LIBRARIES} ${OSCPACK_LIBRARIES})
+set(DEPENDENCY_LIBRARIES ${OpenSim_LIBRARIES} ${OSCPACK_LIBRARIES} Common)
+
+if(WIN32)
+  set(DEPENDENCY_LIBRARIES ${DEPENDENCY_LIBRARIES} Ws2_32 winmm)
+endif()
 
 # dynamic library
 set(target Moticon)

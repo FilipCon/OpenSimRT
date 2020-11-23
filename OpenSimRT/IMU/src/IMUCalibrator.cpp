@@ -200,7 +200,7 @@ IMUCalibrator::transform(const std::pair<double, std::vector<NGIMUData>>& imuDat
 
 void IMUCalibrator::recordNumOfSamples(const size_t& numSamples) {
     cout << "Recording Static Pose..." << endl;
-    size_t i;
+    size_t i = 0;
     while (i < numSamples) {
         // get frame measurements
         quatTable.push_back(m_driver->getFrame());

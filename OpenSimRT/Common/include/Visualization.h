@@ -95,9 +95,9 @@ class Common_API BasicModelVisualizer {
  private:
     OpenSim::Model model;
     SimTK::State state;
-    FPSDecorator* fps;
-    SimTK::Visualizer* visualizer;
-    SimTK::Visualizer::InputSilo* silo;
+    SimTK::ReferencePtr<FPSDecorator> fps;
+    SimTK::ReferencePtr<SimTK::Visualizer> visualizer;
+    SimTK::ReferencePtr<SimTK::Visualizer::InputSilo> silo;
     bool shouldTerminate;
 
     enum class MenuID { SIMULATION }; //// TODO: Add more Menus

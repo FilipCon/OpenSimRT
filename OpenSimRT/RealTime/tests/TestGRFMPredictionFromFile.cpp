@@ -63,6 +63,7 @@ void run() {
 
     // setup model
     Model model(modelFile);
+    model.initSystem();
 
     // setup external forces parameters
     ExternalWrench::Parameters grfRightFootPar{

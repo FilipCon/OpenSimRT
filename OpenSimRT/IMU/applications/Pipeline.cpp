@@ -17,7 +17,6 @@
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <SimTKcommon/internal/State.h>
 #include <Simulation/Model/Model.h>
-#include <bits/stdint-uintn.h>
 #include <chrono>
 #include <cmath>
 #include <exception>

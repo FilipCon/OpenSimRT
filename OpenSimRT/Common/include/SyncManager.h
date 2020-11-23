@@ -33,7 +33,7 @@
 
 namespace OpenSimRT {
 
-template <typename ETX = double> class Common_API SyncManager {
+template <typename ETX = double> class SyncManager {
  public:
     SyncManager() = default; // default ctor, in order to have more ctors
     SyncManager(const ETX& samplingRate, const ETX& threshold) {
