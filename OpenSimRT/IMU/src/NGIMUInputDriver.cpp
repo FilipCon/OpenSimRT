@@ -31,9 +31,7 @@ using namespace OpenSimRT;
 #define OUTPUT_BUFFER_SIZE 1024
 
 #define TIME_NOW                                                               \
-    duration_cast<nanoseconds>(                                                \
-            high_resolution_clock::now().time_since_epoch())                   \
-            .count()
+    duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count()
 
 /*  TODO this is shit!
  */

@@ -37,17 +37,35 @@ MoticonReceiver::MoticonReceiver(const string& ip, const int& port) {
 MoticonReceiver::~MoticonReceiver() {
     delete endPoint;
     delete socket;
+    streamThread.join();
 }
 void MoticonReceiver::setup(const string& ip, const int& port) {
     endPoint = new IpEndpointName(ip.c_str(), port);
     socket = new UdpReceiveSocket(*endPoint);
+
+    streamThread = std::thread(&MoticonReceiver::startStream, this);
 }
 
-string MoticonReceiver::getStream() {
-    // if (!socket->IsBound()) THROW_EXCEPTION("Moticon: Socket is not bound");
-    char buffer[BUFFER_SIZE];
-    socket->ReceiveFrom(*endPoint, buffer, sizeof(buffer));
-    return string(buffer);
+void MoticonReceiver::startStream() {
+    try {
+        while (true) {
+            char buffer[BUFFER_SIZE];
+            socket->ReceiveFrom(*endPoint, buffer, sizeof(buffer));
+            {
+                std::lock_guard<std::mutex> lock(_mu);
+                dataStream = string(buffer);
+                newData = true;
+            }
+            _cond.notify_one();
+        }
+    } catch (std::exception& e) { std::cout << e.what() << std::endl; }
+}
+
+string MoticonReceiver::getDataFromStream() {
+    std::unique_lock<std::mutex> lock(_mu);
+    _cond.wait(lock, [&]() { return newData = true; });
+    newData = false;
+    return dataStream;
 }
 
 vector<double> MoticonReceiver::splitInputStream(string str, string delimiter) {
@@ -92,7 +110,7 @@ OpenSim::TimeSeriesTable MoticonReceiver::initializeLogger() {
 
 MoticonReceivedBundle MoticonReceiver::receiveData() {
     MoticonReceivedBundle data;
-    auto vec = splitInputStream(getStream(), " ");
+    auto vec = splitInputStream(getDataFromStream(), " ");
     double* arr = &vec[0];
 
     // time

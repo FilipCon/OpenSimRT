@@ -42,7 +42,7 @@ template <typename T> struct SlidingWindow {
 
     // insert element
     void insert(const T& x) {
-        if (data.size() == capacity) data.erase(data.begin());
+        if (data.size() >= capacity) data.erase(data.begin());
         data.push_back(x);
     }
 

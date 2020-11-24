@@ -21,12 +21,10 @@ class RealTime_API ExternalForceBasedPhaseDetector : public GaitPhaseDetector {
     };
 
     ExternalForceBasedPhaseDetector(const Parameters& parameters);
-
     void updDetector(const Input& input);
 
  private:
     Parameters parameters;
-
     SlidingWindow<double> rSlidingWindow;
     SlidingWindow<double> lSlidingWindow;
 };

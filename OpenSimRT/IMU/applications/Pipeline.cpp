@@ -48,6 +48,7 @@ void run() {
     auto SEND_PORTS = ini.getVector(section, "IMU_SEND_PORTS", vector<int>());
     auto LISTEN_PORTS =
             ini.getVector(section, "IMU_LISTEN_PORTS", vector<int>());
+    auto INSOLE_LISTEN_IP = ini.getString(section, "INSOLE_LISTEN_IP", "");
     auto INSOLES_PORT = ini.getInteger(section, "INSOLE_LISTEN_PORT", 0);
     auto INSOLE_SIZE = ini.getInteger(section, "INSOLE_SIZE", 0);
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
@@ -94,7 +95,7 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-    // driver
+    // imu driver
     NGIMUInputDriver driver;
     driver.setupInput(imuObservationOrder,
                       vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
@@ -104,7 +105,7 @@ void run() {
     auto imuLogger = driver.initializeLogger();
 
     // insole driver
-    MoticonReceiver mt(LISTEN_IP, INSOLES_PORT);
+    MoticonReceiver mt(INSOLE_LISTEN_IP, INSOLES_PORT);
     mt.setInsoleSize(INSOLE_SIZE);
     auto mtLogger = mt.initializeLogger();
 
@@ -130,15 +131,15 @@ void run() {
     LowPassSmoothFilter ikFilter(ikFilterParam);
 
     ExternalForceBasedPhaseDetector::Parameters detectorParameters;
-    ExternalForceBasedPhaseDetector detector(detectorParameters);
     detectorParameters.threshold = 100;
     detectorParameters.consecutive_values = 5;
+    ExternalForceBasedPhaseDetector detector(detectorParameters);
     GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
                                   &detector);
 
     // sensor data synchronization
     double samplingRate = 30;
-    double threshold = 0.0001;
+    double threshold = 0.001;
     SyncManager manager(samplingRate, threshold);
 
     // visualizer

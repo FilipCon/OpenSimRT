@@ -69,23 +69,23 @@ void run() {
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center to track model position from imus
-    auto rCalcnMarker = Marker("calcn_r_marker",
-                               model.getBodySet().get("calcn_r"), Vec3(0));
-    auto lCalcnMarker = Marker("calcn_l_marker",
-                               model.getBodySet().get("calcn_l"), Vec3(0));
-    model.addMarker(&rCalcnMarker);
-    model.addMarker(&lCalcnMarker);
-    model.finalizeConnections();
+    // add marker to pelvis center
+    auto pelvisMarker =
+            Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
+    model.addMarker(&pelvisMarker);
 
     State state = model.initSystem();
     model.realizePosition(state);
+
+    model.realizePosition(state);
+    auto height = model.getBodySet().get("pelvis").findStationLocationInGround(
+            state, Vec3(0));
 
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
     InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"calcn_r_marker", "calcn_l_marker"},
+            model, vector<string>{"PelvisCenter"},
             markerTasks, markerObservationOrder);
 
     // imu tasks
@@ -110,7 +110,7 @@ void run() {
     clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
-    double samplingRate = 59;
+    double samplingRate = 40;
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
@@ -165,7 +165,7 @@ void run() {
             imuData.second = driver.fromVector(pack.second[0]);
 
             // solve ik
-            auto pose = ik.solve(clb.transform(imuData, {Vec3(0), Vec3(0)}));
+            auto pose = ik.solve(clb.transform(imuData, {height}));
 
             // filter
             auto ikFiltered = ikFilter.filter({pose.t, pose.q});
