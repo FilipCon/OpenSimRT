@@ -1,3 +1,4 @@
+#include "AccelerationBasedPhaseDetector.h"
 #include "ContactForceBasedPhaseDetector.h"
 #include "GRFMPrediction.h"
 #include "GaitPhaseDetector.h"
@@ -7,12 +8,13 @@
 #include "SignalProcessing.h"
 #include "Simulation.h"
 #include "Utils.h"
-#include "AccelerationBasedPhaseDetector.h"
 #include "Visualization.h"
 
 #include <OpenSim/Common/STOFileAdapter.h>
+#include <chrono>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 using namespace std;
 using namespace OpenSim;
@@ -27,6 +29,7 @@ void run() {
     auto resultsDir = DATA_DIR + ini.getString(section, "RESULTS_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
     auto ikFile = subjectDir + ini.getString(section, "IK_FILE", "");
+    auto grfMotFile = subjectDir + ini.getString(section, "GRF_MOT_FILE", "");
 
     auto grfRightApplyBody =
             ini.getString(section, "GRF_RIGHT_APPLY_TO_BODY", "");
@@ -65,6 +68,9 @@ void run() {
     Model model(modelFile);
     model.initSystem();
 
+    // setup external forces
+    Storage grfMotion(grfMotFile);
+
     // setup external forces parameters
     ExternalWrench::Parameters grfRightFootPar{
             grfRightApplyBody, grfRightForceExpressed, grfRightPointExpressed};
@@ -98,25 +104,43 @@ void run() {
     ikFilterParam.calculateDerivatives = true;
     LowPassSmoothFilter ikFilter(ikFilterParam);
 
-    // setup grfm prediction
-    // GRFMPrediction::Parameters parameters;
-    // parameters.threshold = 100;
-    // parameters.plane_origin = Vec3(0.0, platform_offset, 0.0);
-    // parameters.plane_normal = Vec3(0, 1, 0);
-    // auto detector = ContactForceBasedPhaseDetector(model, parameters);
-    // GRFMPrediction grfm(model, parameters, &detector);
+    // // setup grfm prediction
+    // ContactForceBasedPhaseDetector::Parameters detectorParameters;
+    // detectorParameters.threshold = 100;
+    // detectorParameters.windowSize = 2;
+    // detectorParameters.plane_origin = Vec3(0.0, platform_offset, 0.0);
+    // auto detector = ContactForceBasedPhaseDetector(model, detectorParameters);
     AccelerationBasedPhaseDetector::Parameters parameters;
-    parameters.acc_threshold = 10;
-    parameters.vel_threshold = 2.2;
-    parameters.consecutive_values = 5;
-    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
-    parameters.filterParameters.memory = 10;
-    parameters.filterParameters.delay = 5;
-    parameters.filterParameters.cutoffFrequency = 1;
-    parameters.filterParameters.splineOrder = 3;
-    parameters.filterParameters.calculateDerivatives = true;
+    parameters.accThreshold = 4;
+    parameters.velThreshold = 2.2;
+    parameters.windowSize = 7;
+    parameters.rFootBodyName = "calcn_r";
+    parameters.lFootBodyName = "calcn_l";
+    parameters.rHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    parameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    parameters.lHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    parameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    parameters.samplingFrequency = 60;
+    parameters.accLPFilterFreq = 5;
+    parameters.velLPFilterFreq = 5;
+    parameters.posLPFilterFreq = 5;
+    parameters.accLPFilterOrder = 1;
+    parameters.velLPFilterOrder = 1;
+    parameters.posLPFilterOrder = 1;
+    parameters.posDiffOrder = 2;
+    parameters.velDiffOrder = 2;
     AccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfm(model, GRFMPrediction::Parameters(), &detector);
+    GRFMPrediction::Parameters grfmParameters;
+    grfmParameters.method = "Newton-Euler";
+    grfmParameters.pelvisBodyName = "pelvis";
+    grfmParameters.rStationBodyName = "calcn_r";
+    grfmParameters.lStationBodyName = "calcn_l";
+    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    grfmParameters.directionWindowSize = 10;
+    GRFMPrediction grfm(model, grfmParameters, &detector);
 
     // initialize id and logger
     InverseDynamics id(model, wrenchParameters);
@@ -143,36 +167,47 @@ void run() {
 
         if (!ikFiltered.isValid) { continue; }
 
-        // perform grfm prediction
-        detector.updDetector({ikFiltered.t, q, qDot, qDDot});
-        auto grfmOutput = grfm.solve({ikFiltered.t, q, qDot, qDDot});
+        // // perform grfm prediction
+        // detector.updDetector({ikFiltered.t, q, qDot, qDDot});
+        // auto grfmOutput = grfm.solve({ikFiltered.t, q, qDot, qDDot});
 
-        // setup ID input
-        ExternalWrench::Input grfRightWrench = {
-                grfmOutput[0].point, grfmOutput[0].force, grfmOutput[0].moment};
-        ExternalWrench::Input grfLeftWrench = {
-                grfmOutput[1].point, grfmOutput[1].force, grfmOutput[1].moment};
+        // // setup ID input
+        // ExternalWrench::Input grfRightWrench = {
+        //         grfmOutput[0].point, grfmOutput[0].force, grfmOutput[0].moment};
+        // ExternalWrench::Input grfLeftWrench = {
+        //         grfmOutput[1].point, grfmOutput[1].force, grfmOutput[1].moment};
 
-        // solve ID
-        auto idOutput = id.solve(
-                {t, q, qDot, qDDot,
-                 vector<ExternalWrench::Input>{grfRightWrench, grfLeftWrench}});
+        // // solve ID
+        // auto idOutput = id.solve(
+        //         {t, q, qDot, qDDot,
+        //          vector<ExternalWrench::Input>{grfRightWrench, grfLeftWrench}});
+
+                // get grf forces
+        auto grfRightWrench = ExternalWrench::getWrenchFromStorage(
+                t, grfRightLabels, grfMotion);
+        auto grfLeftWrench = ExternalWrench::getWrenchFromStorage(
+                t, grfLeftLabels, grfMotion);
 
         // visualization
         visualizer.update(q);
-        rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
-        leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
+        // rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
+        // leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
+
+        rightGRFDecorator->update(grfRightWrench.point, grfRightWrench.force);
+        leftGRFDecorator->update(grfLeftWrench.point, grfLeftWrench.force);
 
         // log data (use filter time to align with delay)
-        tauLogger.appendRow(ikFiltered.t, ~idOutput.tau);
-        grfRightLogger.appendRow(grfmOutput[0].t, ~grfmOutput[0].asVector());
-        grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
+        // tauLogger.appendRow(ikFiltered.t, ~idOutput.tau);
+        // grfRightLogger.appendRow(grfmOutput[0].t, ~grfmOutput[0].asVector());
+        // grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
 
-    // store results
-    STOFileAdapter::write(tauLogger, resultsDir + "tau.sto");
-    STOFileAdapter::write(grfRightLogger, resultsDir + "wrench_right.sto");
-    STOFileAdapter::write(grfLeftLogger, resultsDir + "wrench_left.sto");
+    // // store results
+    // STOFileAdapter::write(tauLogger, resultsDir + "tau.sto");
+    // STOFileAdapter::write(grfRightLogger, resultsDir + "wrench_right.sto");
+    // STOFileAdapter::write(grfLeftLogger, resultsDir + "wrench_left.sto");
 }
 
 int main(int argc, char* argv[]) {

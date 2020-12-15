@@ -1,5 +1,5 @@
+#include "AccelerationBasedPhaseDetector.h"
 #include "INIReader.h"
-#include "InverseDynamics.h"
 #include "RealTimeAnalysis.h"
 #include "Settings.h"
 
@@ -87,12 +87,12 @@ void run(char const* name) {
     const int joints = model.getJointSet().getSize();
     const int muscles = model.getMuscles().getSize();
 
-    // load and verify moment arm function
-    auto calcMomentArm = OpenSimUtils::getMomentArmFromDynamicLibrary(
-            model, momentArmLibraryPath);
+    // // load and verify moment arm function
+    // auto calcMomentArm = OpenSimUtils::getMomentArmFromDynamicLibrary(
+    //         model, momentArmLibraryPath);
 
     // prepare marker tasks
-    IKTaskSet ikTaskSet(ikTaskSetFile);
+    // IKTaskSet ikTaskSet(ikTaskSetFile);
     MarkerData markerData(trcFile);
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> observationOrder;
@@ -142,7 +142,7 @@ void run(char const* name) {
 
     // initialize filter parameters
     LowPassSmoothFilterTS::Parameters filterParameters;
-    filterParameters.numSignals = dofs + 9 * numForcePlates;
+    filterParameters.numSignals = dofs; // + 9 * numForcePlates;
     filterParameters.memory = memory;
     filterParameters.delay = delay;
     filterParameters.cutoffFrequency = cutoffFreq;
@@ -152,7 +152,7 @@ void run(char const* name) {
     // pipeline
     RealTimeAnalysis::Parameters pipelineParameters;
     pipelineParameters.useVisualizer = useVisualizer;
-    pipelineParameters.solveMuscleOptimization = solveMuscleOptimization;
+    pipelineParameters.solveMuscleOptimization = false;
     pipelineParameters.ikMarkerTasks = markerTasks;
     pipelineParameters.ikConstraintsWeight = 100;
     pipelineParameters.ikAccuracy = 0.01;
@@ -161,9 +161,53 @@ void run(char const* name) {
             convergenceTolerance;
     pipelineParameters.wrenchParameters = wrenchParameters;
     pipelineParameters.dataAcquisitionFunction = dataAcquisitionFunction;
-    pipelineParameters.momentArmFunction = calcMomentArm;
+    // pipelineParameters.momentArmFunction = calcMomentArm;
     pipelineParameters.reactionForceOnBodies =
             vector<string>{"tibia_r", "talus_l"};
+    pipelineParameters.useGRFMPrediction = true;
+    AccelerationBasedPhaseDetector::Parameters detectorParameters;
+    detectorParameters.accThreshold = 7;
+    detectorParameters.velThreshold = 1.9;
+    detectorParameters.windowSize = 7;
+    detectorParameters.rFootBodyName = "calcn_r";
+    detectorParameters.lFootBodyName = "calcn_l";
+    detectorParameters.rHeelLocationInFoot =
+            SimTK::Vec3(0.014, -0.0168, -0.0055);
+    detectorParameters.rToeLocationInFoot =
+            SimTK::Vec3(0.24, -0.0168, -0.00117);
+    detectorParameters.lHeelLocationInFoot =
+            SimTK::Vec3(0.014, -0.0168, 0.0055);
+    detectorParameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    detectorParameters.samplingFrequency = 60;
+    detectorParameters.accLPFilterFreq = 5;
+    detectorParameters.velLPFilterFreq = 5;
+    detectorParameters.posLPFilterFreq = 5;
+    detectorParameters.accLPFilterOrder = 1;
+    detectorParameters.velLPFilterOrder = 1;
+    detectorParameters.posLPFilterOrder = 1;
+    detectorParameters.posDiffOrder = 2;
+    detectorParameters.velDiffOrder = 2;
+    pipelineParameters.detectorUpdateMethod =
+            RealTimeAnalysis::PhaseDetectorUpdateMethod::INTERNAL;
+    auto phaseDetector =
+            new AccelerationBasedPhaseDetector(model, detectorParameters);
+    pipelineParameters.phaseDetector = phaseDetector;
+    GRFMPrediction::Parameters grfmParameters;
+    grfmParameters.method = "Newton-Euler";
+    grfmParameters.pelvisBodyName = "pelvis";
+    grfmParameters.rStationBodyName = "calcn_r";
+    grfmParameters.lStationBodyName = "calcn_l";
+    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    grfmParameters.directionWindowSize = 10;
+    pipelineParameters.grfmParameters = grfmParameters;
+    pipelineParameters.internalPhaseDetectorUpdateFunction =
+            [&](const double& t, const SimTK::Vector& q,
+                const SimTK::Vector& qd, const SimTK::Vector& qdd) {
+                phaseDetector->updDetector({t, q, qd, qdd});
+            };
     RealTimeAnalysis pipeline(model, pipelineParameters);
 
     // run pipeline

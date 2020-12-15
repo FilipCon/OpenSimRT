@@ -89,7 +89,7 @@ SimTK::Rotation IMUCalibrator::setGroundOrientationSeq(const double& xDegrees,
     return R_GoGi;
 }
 
-SimTK::Rotation IMUCalibrator::computeheadingRotation(
+SimTK::Rotation IMUCalibrator::computeHeadingRotation(
         const std::string& baseImuName, const std::string& imuDirectionAxis) {
     if (!imuDirectionAxis.empty() && !baseImuName.empty()) {
         // set coordinate direction based on given imu direction axis given as

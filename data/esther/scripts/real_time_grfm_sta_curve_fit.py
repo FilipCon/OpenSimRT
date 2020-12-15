@@ -16,11 +16,9 @@ Tds = 0.12
 # sigmoid functions
 
 
-def sigmoid_with_bump(t, B, M, m1, m2, c):
+def sigmoid_with_bump(t, A, K, B, M, m1, m2, c):
     ''' Sigmoid with "bump" component
     '''
-    A = 0
-    K = 1
     return A + K / (1.0 + np.exp(B * (t - m1 * Tds))) + \
         M * np.exp(-np.power((t - m2*Tds), 2) / (2 * np.power(c, 2)))
 
@@ -135,7 +133,7 @@ grf_fz = np.array([experiment_grf[l_prefix + 'force_vz'].values,
 #                    experiment_grf[r_prefix + 'torque_z'].values])
 
 grf_data = [grf_fx, grf_fy, grf_fz]
-curves = [sigmoid_with_bump, logistic, logistic]
+curves = [sigmoid_with_bump, sigmoid_with_bump, logistic]
 bibliography_curves = [anteriorSTA, componentSTA, componentSTA]
 titles = ['Anterior GRF (f_x)', 'Vertical GRF (f_y)', 'Lateral GRF (f_z)']
 

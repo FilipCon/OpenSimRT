@@ -1,5 +1,8 @@
 #include "RealTimeAnalysis.h"
 
+#include "Exception.h"
+#include "GRFMPrediction.h"
+
 #include <OpenSim/Common/GCVSpline.h>
 #include <OpenSim/Common/Signal.h>
 #include <OpenSim/Simulation/Model/BodySet.h>
@@ -75,6 +78,13 @@ RealTimeAnalysis::RealTimeAnalysis(
             model, parameters.ikMarkerTasks, parameters.ikIMUTasks,
             parameters.ikConstraintsWeight, parameters.ikAccuracy);
 
+    if (parameters.useGRFMPrediction) {
+        if (parameters.phaseDetector == nullptr)
+            THROW_EXCEPTION("Phase detector is null");
+        grfmPrediction = new GRFMPrediction(model, parameters.grfmParameters,
+                                            parameters.phaseDetector.get());
+    }
+
     inverseDynamics = new InverseDynamics(model, parameters.wrenchParameters);
 
     muscleOptimization = new MuscleOptimization(
@@ -113,6 +123,10 @@ void RealTimeAnalysis::acquisition() {
 
         UnfilteredData unfilteredData;
         while (true) {
+            if (exceptionPtr != nullptr) {
+                std::rethrow_exception(exceptionPtr);
+            }
+
             // get data from Vicon or other method
             auto acquisitionData = parameters.dataAcquisitionFunction();
             if (previousAcquisitionTime >= acquisitionData.IkFrame.t) {
@@ -131,7 +145,9 @@ void RealTimeAnalysis::acquisition() {
             // filter and push to buffer
             unfilteredData.t = pose.t;
             unfilteredData.q = pose.q;
-            unfilteredData.externalWrenches = acquisitionData.ExternalWrenches;
+            if (!parameters.useGRFMPrediction)
+                unfilteredData.externalWrenches =
+                        acquisitionData.ExternalWrenches;
 
             // update internal state of lowPassFilter
             lowPassFilter->updState({pose.t, unfilteredData.toVector()});
@@ -163,10 +179,42 @@ void RealTimeAnalysis::processing() {
             filteredData.fromVector(data.t, data.x, data.xDot, data.xDDot,
                                     model.getNumCoordinates());
 
+            // grfm prediction
+            std::vector<ExternalWrench::Input> externalWrenches;
+            if (parameters.useGRFMPrediction) {
+                // update detector
+                if (parameters.detectorUpdateMethod ==
+                    PhaseDetectorUpdateMethod::INTERNAL)
+                    parameters.internalPhaseDetectorUpdateFunction(
+                            data.t, data.x, data.xDot, data.xDDot);
+                else if (parameters.detectorUpdateMethod ==
+                         PhaseDetectorUpdateMethod::EXTERNAL)
+                    parameters.externalPhaseDetectorUpdateFunction();
+                else
+                    THROW_EXCEPTION("Wrong detector update method");
+
+                // solve grfm prediction
+                auto grfmOutput = grfmPrediction->solve(
+                        {filteredData.t, filteredData.q, filteredData.qd,
+                         filteredData.qdd});
+
+                // set predicted wrenches
+                ExternalWrench::Input grfRightWrench = {grfmOutput[0].point,
+                                                        grfmOutput[0].force,
+                                                        grfmOutput[0].moment};
+                ExternalWrench::Input grfLeftWrench = {grfmOutput[1].point,
+                                                       grfmOutput[1].force,
+                                                       grfmOutput[1].moment};
+                externalWrenches = {grfRightWrench, grfLeftWrench};
+            } else {
+                // use filtered external wrenches
+                externalWrenches = filteredData.externalWrenches;
+            }
+
             // solve id
             auto id = inverseDynamics->solve({filteredData.t, filteredData.q,
                                               filteredData.qd, filteredData.qdd,
-                                              filteredData.externalWrenches});
+                                              externalWrenches});
             // solve so and jr
             if (parameters.solveMuscleOptimization) {
                 auto so = muscleOptimization->solve({filteredData.t,
@@ -178,7 +226,7 @@ void RealTimeAnalysis::processing() {
 
                 auto jr = jointReaction->solve({filteredData.t, filteredData.q,
                                                 filteredData.qd, so.fm,
-                                                filteredData.externalWrenches});
+                                                externalWrenches});
                 reactionWrenches = jr.reactionWrench;
                 reactionWrench = jointReaction->asForceMomentPoint(jr);
             }
@@ -189,8 +237,8 @@ void RealTimeAnalysis::processing() {
             output.q = filteredData.q;
             output.qd = filteredData.qd;
             output.qdd = filteredData.qdd;
-            output.grfRightWrench = filteredData.externalWrenches[0].toVector();
-            output.grfLeftWrench = filteredData.externalWrenches[1].toVector();
+            output.grfRightWrench = externalWrenches[0].toVector();
+            output.grfLeftWrench = externalWrenches[1].toVector();
             output.tau = id.tau;
             output.am = am;
             output.fm = fm;
@@ -205,21 +253,19 @@ void RealTimeAnalysis::processing() {
             // visualization
             if (parameters.useVisualizer) {
                 visualizer->update(filteredData.q, am);
-                for (int i = 0; i < filteredData.externalWrenches.size(); ++i) {
-                    GRFDecorators[i]->update(
-                            filteredData.externalWrenches[i].point,
-                            filteredData.externalWrenches[i].force);
-                }
-                // if (parameters.solveMuscleOptimization) {
-                //     for (int i = 0; i <
-                //     parameters.reactionForceOnBodies.size();
-                //          ++i) {
-                //         visualizer->updateReactionForceDecorator(
-                //         reactionWrenches,
-                //                 parameters.reactionForceOnBodies[i],
-                //                 reactionForceDecorators[i]);
-                //     }
+                // for (int i = 0; i < externalWrenches.size(); ++i) {
+                //     GRFDecorators[i]->update(externalWrenches[i].point,
+                //                              externalWrenches[i].force);
                 // }
+                if (parameters.solveMuscleOptimization) {
+                    for (int i = 0; i < parameters.reactionForceOnBodies.size();
+                         ++i) {
+                        visualizer->updateReactionForceDecorator(
+                                reactionWrenches,
+                                parameters.reactionForceOnBodies[i],
+                                reactionForceDecorators[i]);
+                    }
+                }
             }
         }
     } catch (const std::exception& e) {

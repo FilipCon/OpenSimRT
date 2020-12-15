@@ -68,7 +68,7 @@ MuscleOptimization::MuscleOptimization(
     optimizer->useNumericalJacobian(false);
     if (optimizationParameters.algorithm ==
         SimTK::OptimizerAlgorithm::InteriorPoint) {
-        optimizer->setLimitedMemoryHistory(100);
+        optimizer->setLimitedMemoryHistory(1);
         optimizer->setAdvancedBoolOption("warm_start", true);
         optimizer->setAdvancedRealOption("expect_infeasible_problem", false);
         optimizer->setAdvancedRealOption("obj_scaling_factor", 1);

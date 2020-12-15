@@ -47,8 +47,6 @@ void run() {
     auto yGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Y", 0);
     auto zGroundRotDeg = ini.getReal(section, "IMU_GROUND_ROTATION_Z", 0);
 
-    auto platform_offset = ini.getReal(section, "PLATFORM_OFFSET", 0.0);
-
     auto memory = ini.getInteger(section, "MEMORY", 0);
     auto cutoffFreq = ini.getReal(section, "CUTOFF_FREQ", 0);
     auto delay = ini.getInteger(section, "DELAY", 0);
@@ -69,24 +67,11 @@ void run() {
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center to track model position from imus
-    auto rCalcnMarker = Marker("calcn_r_marker",
-                               model.getBodySet().get("calcn_r"), Vec3(0));
-    auto lCalcnMarker = Marker("calcn_l_marker",
-                               model.getBodySet().get("calcn_l"), Vec3(0));
-    model.addMarker(&rCalcnMarker);
-    model.addMarker(&lCalcnMarker);
-    model.finalizeConnections();
-
-    State state = model.initSystem();
-    model.realizePosition(state);
-
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
     InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"calcn_r_marker", "calcn_l_marker"},
-            markerTasks, markerObservationOrder);
+            model, vector<string>{}, markerTasks, markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -107,30 +92,8 @@ void run() {
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.recordTime(3.0); // record for 3 seconds
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
-    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.computeHeadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
-
-    double samplingRate = 59;
-    double threshold = 0.0001;
-    SyncManager manager(samplingRate, threshold);
-
-    AccelerationBasedPhaseDetector::Parameters parameters;
-    parameters.acc_threshold = 6;
-    parameters.vel_threshold = 2;
-    parameters.consecutive_values = 5;
-    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
-    parameters.filterParameters.memory = 20;
-    parameters.filterParameters.delay = 5;
-    parameters.filterParameters.cutoffFrequency = 1;
-    parameters.filterParameters.splineOrder = 3;
-    parameters.filterParameters.calculateDerivatives = true;
-    AccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
-                                  &detector);
-
-    // initialize ik (lower constraint weight and accuracy -> faster tracking)
-    InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
-    auto qLogger = ik.initializeLogger();
 
     // setup filters
     LowPassSmoothFilter::Parameters ikFilterParam;
@@ -141,6 +104,50 @@ void run() {
     ikFilterParam.splineOrder = splineOrder;
     ikFilterParam.calculateDerivatives = true;
     LowPassSmoothFilter ikFilter(ikFilterParam);
+
+    // sync manager
+    double samplingRate = 40;
+    double threshold = 0.0001;
+    SyncManager manager(samplingRate, threshold);
+
+    // grfm prediction with AccelerationBasedPhaseDetector
+    AccelerationBasedPhaseDetector::Parameters parameters;
+    parameters.accThreshold = 7;
+    parameters.velThreshold = 1.9;
+    parameters.windowSize = 10;
+    parameters.rFootBodyName = "calcn_r";
+    parameters.lFootBodyName = "calcn_l";
+    parameters.rHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    parameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    parameters.lHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    parameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    parameters.samplingFrequency = 40;
+    parameters.accLPFilterFreq = 5;
+    parameters.velLPFilterFreq = 5;
+    parameters.posLPFilterFreq = 5;
+    parameters.accLPFilterOrder = 1;
+    parameters.velLPFilterOrder = 1;
+    parameters.posLPFilterOrder = 1;
+    parameters.posDiffOrder = 2;
+    parameters.velDiffOrder = 2;
+    AccelerationBasedPhaseDetector detector(model, parameters);
+    GRFMPrediction::Parameters grfmParameters;
+    grfmParameters.method = "Newton-Euler";
+    grfmParameters.pelvisBodyName = "pelvis";
+    grfmParameters.rStationBodyName = "calcn_r";
+    grfmParameters.lStationBodyName = "calcn_l";
+    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    grfmParameters.directionWindowSize = 10;
+    GRFMPrediction grfmPrediction(model, grfmParameters, &detector);
+    auto grfRightLogger = ExternalWrench::initializeLogger();
+    auto grfLeftLogger = ExternalWrench::initializeLogger();
+
+    // initialize ik (lower constraint weight and accuracy -> faster tracking)
+    InverseKinematics ik(model, markerTasks, imuTasks, SimTK::Infinity, 1e-5);
+    auto qLogger = ik.initializeLogger();
 
     // visualizer
     BasicModelVisualizer visualizer(model);
@@ -165,7 +172,7 @@ void run() {
             imuData.second = driver.fromVector(pack.second[0]);
 
             // solve ik
-            auto pose = ik.solve(clb.transform(imuData, {Vec3(0), Vec3(0)}));
+            auto pose = ik.solve(clb.transform(imuData, {}));
 
             // filter
             auto ikFiltered = ikFilter.filter({pose.t, pose.q});
@@ -180,12 +187,16 @@ void run() {
             auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
-            visualizer.update(pose.q);
+            visualizer.update(q);
             rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
             leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
 
             // record
-            qLogger.appendRow(pose.t - initTime, ~pose.q);
+            qLogger.appendRow(pose.t, ~pose.q);
+            grfRightLogger.appendRow(grfmOutput[0].t,
+                                     ~grfmOutput[0].asVector());
+            grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
+            imuLogger.appendRow(pose.t, ~pack.second[0]);
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;
@@ -197,6 +208,12 @@ void run() {
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
         CSVFileAdapter::write(imuLogger,
                               subjectDir + "experimental_data/ngimu_data.csv");
+        STOFileAdapter::write(
+                grfRightLogger,
+                subjectDir + "/real_time/grfm_prediction/wrench_right.sto");
+        STOFileAdapter::write(
+                grfLeftLogger,
+                subjectDir + "/real_time/grfm_prediction/wrench_left.sto");
     }
 }
 

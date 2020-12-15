@@ -56,8 +56,6 @@ void run() {
     auto delay = ini.getInteger(section, "DELAY", 0);
     auto splineOrder = ini.getInteger(section, "SPLINE_ORDER", 0);
 
-    auto platform_offset = ini.getReal(section, "PLATFORM_OFFSET", 0.0);
-
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
 
@@ -78,9 +76,6 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-    auto grfRightLogger = ExternalWrench::initializeLogger();
-    auto grfLeftLogger = ExternalWrench::initializeLogger();
-
     // ngimu input data driver from file
     NGIMUInputFromFileDriver imuDriver(ngimuDataFile, 60);
     imuDriver.startListening();
@@ -89,7 +84,7 @@ void run() {
     IMUCalibrator clb(model, &imuDriver, imuObservationOrder);
     clb.recordNumOfSamples(1);
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
-    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.computeHeadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
@@ -111,18 +106,38 @@ void run() {
     SyncManager manager(samplingRate, threshold);
 
     AccelerationBasedPhaseDetector::Parameters parameters;
-    parameters.acc_threshold = 6;
-    parameters.vel_threshold = 2;
-    parameters.consecutive_values = 5;
-    parameters.filterParameters.numSignals = 4 * SimTK::Vec3().size();
-    parameters.filterParameters.memory = 20;
-    parameters.filterParameters.delay = 5;
-    parameters.filterParameters.cutoffFrequency = 1;
-    parameters.filterParameters.splineOrder = 3;
-    parameters.filterParameters.calculateDerivatives = true;
+    parameters.accThreshold = 7;
+    parameters.velThreshold = 1.9;
+    parameters.windowSize = 7;
+    parameters.rFootBodyName = "calcn_r";
+    parameters.lFootBodyName = "calcn_l";
+    parameters.rHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    parameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    parameters.lHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    parameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    parameters.samplingFrequency = 60;
+    parameters.accLPFilterFreq = 5;
+    parameters.velLPFilterFreq = 5;
+    parameters.posLPFilterFreq = 5;
+    parameters.accLPFilterOrder = 1;
+    parameters.velLPFilterOrder = 1;
+    parameters.posLPFilterOrder = 1;
+    parameters.posDiffOrder = 2;
+    parameters.velDiffOrder = 2;
     AccelerationBasedPhaseDetector detector(model, parameters);
-    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
-                                  &detector);
+    GRFMPrediction::Parameters grfmParameters;
+    grfmParameters.method = "Newton-Euler";
+    grfmParameters.pelvisBodyName = "pelvis";
+    grfmParameters.rStationBodyName = "calcn_r";
+    grfmParameters.lStationBodyName = "calcn_l";
+    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    grfmParameters.directionWindowSize = 10;
+    GRFMPrediction grfmPrediction(model, grfmParameters, &detector);
+    auto grfRightLogger = ExternalWrench::initializeLogger();
+    auto grfLeftLogger = ExternalWrench::initializeLogger();
 
     // visualizer
     BasicModelVisualizer visualizer(model);

@@ -59,7 +59,7 @@ void NGIMUInputFromFileDriver::startListening() {
 
 std::vector<NGIMUData> NGIMUInputFromFileDriver::getFrame() {
     std::unique_lock<std::mutex> lock(_mutex);
-    _cond.wait(lock, [&]() { return _newRow == true; });
+    _cond.wait(lock, [&]() { return (_newRow == true) || (exc_ptr != nullptr); });
     _newRow = false;
     return std::move(fromVector(_frame.getAsVector()));
 }

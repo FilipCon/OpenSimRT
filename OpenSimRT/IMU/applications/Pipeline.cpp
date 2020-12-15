@@ -71,22 +71,11 @@ void run() {
     // setup model
     Model model(modelFile);
 
-    // add marker to pelvis center
-    auto pelvisMarker =
-            Marker("PelvisCenter", model.getBodySet().get("pelvis"), Vec3(0));
-    model.addMarker(&pelvisMarker);
-
-    State state = model.initSystem();
-    model.realizePosition(state);
-    auto height = model.getBodySet().get("pelvis").findStationLocationInGround(
-            state, Vec3(0));
-
     // marker tasks
     vector<InverseKinematics::MarkerTask> markerTasks;
     vector<string> markerObservationOrder;
     InverseKinematics::createMarkerTasksFromMarkerNames(
-            model, vector<string>{"PelvisCenter"}, markerTasks,
-            markerObservationOrder);
+            model, vector<string>{}, markerTasks, markerObservationOrder);
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -112,7 +101,7 @@ void run() {
     IMUCalibrator clb = IMUCalibrator(model, &driver, imuObservationOrder);
     clb.recordTime(3); // record for 3 seconds
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
-    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.computeHeadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)
@@ -130,14 +119,25 @@ void run() {
     LowPassSmoothFilter ikFilter(ikFilterParam);
 
     ExternalForceBasedPhaseDetector::Parameters detectorParameters;
-    ExternalForceBasedPhaseDetector detector(detectorParameters);
     detectorParameters.threshold = 100;
-    detectorParameters.consecutive_values = 5;
-    GRFMPrediction grfmPrediction(model, GRFMPrediction::Parameters(),
-                                  &detector);
+    detectorParameters.windowSize = 7;
+    ExternalForceBasedPhaseDetector detector(detectorParameters);
+    GRFMPrediction::Parameters grfmParameters;
+    grfmParameters.method = "Newton-Euler";
+    grfmParameters.pelvisBodyName = "pelvis";
+    grfmParameters.rStationBodyName = "calcn_r";
+    grfmParameters.lStationBodyName = "calcn_l";
+    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
+    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
+    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    grfmParameters.directionWindowSize = 10;
+    GRFMPrediction grfmPrediction(model, grfmParameters, &detector);
+    auto grfRightLogger = ExternalWrench::initializeLogger();
+    auto grfLeftLogger = ExternalWrench::initializeLogger();
 
     // sensor data synchronization
-    double samplingRate = 30;
+    double samplingRate = 20;
     double threshold = 0.0001;
     SyncManager manager(samplingRate, threshold);
 
@@ -157,7 +157,7 @@ void run() {
             // change frame representation
             const auto imuDataAsPairs = driver.asPairsOfVectors(imuDataFrame);
             const auto insoleDataAsPairs = make_pair(
-                    insoleDataFrame.timestamp, insoleDataFrame.asVector());
+                 insoleDataFrame.timestamp, insoleDataFrame.asVector());
 
             // synchronize data streams
             manager.appendPack(imuDataAsPairs, insoleDataAsPairs);
@@ -175,7 +175,7 @@ void run() {
             moticonData.fromVector(pack.second[1]);
 
             // solve ik
-            auto pose = ik.solve(clb.transform(imuData, {height}));
+            auto pose = ik.solve(clb.transform(imuData, {}));
 
             // filter
             auto ikFiltered = ikFilter.filter({pose.t, pose.q});
@@ -185,11 +185,11 @@ void run() {
 
             if (!ikFiltered.isValid) continue;
 
-            // grfm prediction
-            detector.updDetector({moticonData.timestamp,
-                                  moticonData.right.totalForce,
-                                  moticonData.left.totalForce});
-            auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
+            // // grfm prediction
+            // detector.updDetector({moticonData.timestamp,
+            //                       moticonData.right.totalForce,
+            //                       moticonData.left.totalForce});
+            // auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
 
             // visualize
             const auto& r_cop = moticonData.right.cop;
@@ -204,16 +204,18 @@ void run() {
                                                calcn_l_point_in_ground);
             visualizer.update(pose.q);
             rightGRFDecorator->update(calcn_r_point_in_ground,
-                                      grfmOutput[0].force);
+                                      Vec3(0, moticonData.right.totalForce, 0));
             leftGRFDecorator->update(calcn_l_point_in_ground,
-                                     grfmOutput[1].force);
+                                     Vec3(0, moticonData.left.totalForce, 0));
 
             // record
-            qLogger.appendRow(pose.t - initTime, ~pose.q);
-            imuLogger.appendRow(imuData.first - initTime,
+            qLogger.appendRow(pose.t, ~pose.q);
+            imuLogger.appendRow(imuData.first,
                                 ~driver.asVector(imuData.second));
-            mtLogger.appendRow(moticonData.timestamp - initTime,
-                               ~moticonData.asVector());
+            mtLogger.appendRow(moticonData.timestamp, ~moticonData.asVector());
+            // grfRightLogger.appendRow(grfmOutput[0].t,
+            //                          ~grfmOutput[0].asVector());
+            // grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;
@@ -227,6 +229,12 @@ void run() {
                               subjectDir + "experimental_data/ngimu_data.csv");
         CSVFileAdapter::write(mtLogger,
                               subjectDir + "experimental_data/moticon.csv");
+        STOFileAdapter::write(
+                grfRightLogger,
+                subjectDir + "/real_time/grfm_prediction/wrench_right.sto");
+        STOFileAdapter::write(
+                grfLeftLogger,
+                subjectDir + "/real_time/grfm_prediction/wrench_left.sto");
     }
 }
 

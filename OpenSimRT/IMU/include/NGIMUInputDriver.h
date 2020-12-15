@@ -35,7 +35,7 @@ class IMU_API NGIMUInputDriver : public InputDriver<NGIMUData> {
 
     virtual void startListening() override;
     virtual void stopListening() override;
-    OpenSim::TimeSeriesTable initializeLogger();
+    OpenSim::TimeSeriesTable initializeLogger() const;
 
     // representation formats
     static SimTK::Vector asVector(const IMUDataFrame& imuDataFrame);

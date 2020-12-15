@@ -81,7 +81,7 @@ void run() {
     IMUCalibrator clb(model, &imuDriver, imuObservationOrder);
     clb.recordNumOfSamples(1);
     clb.setGroundOrientationSeq(xGroundRotDeg, yGroundRotDeg, zGroundRotDeg);
-    clb.computeheadingRotation(imuBaseBody, imuDirectionAxis);
+    clb.computeHeadingRotation(imuBaseBody, imuDirectionAxis);
     clb.calibrateIMUTasks(imuTasks);
 
     // initialize ik (lower constraint weight and accuracy -> faster tracking)

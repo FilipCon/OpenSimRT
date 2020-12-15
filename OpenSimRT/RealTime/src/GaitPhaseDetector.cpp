@@ -1,15 +1,16 @@
 #include "GaitPhaseDetector.h"
+
 #include "GRFMPrediction.h"
 
 using namespace OpenSimRT;
-#define MEMORY 15
 
-GaitPhaseDetector::GaitPhaseDetector() : Tds(-1), Tss(-1) {
+GaitPhaseDetector::GaitPhaseDetector(const int& windowSize)
+        : _windowSize(2 * windowSize), Tds(-1), Tss(-1) {
     // initialize and set size of legphase sliding window
     phaseWindowR.init(SimTK::Array_<GaitPhaseState::LegPhase>(
-            MEMORY, GaitPhaseState::LegPhase::INVALID));
+            _windowSize, GaitPhaseState::LegPhase::INVALID));
     phaseWindowL.init(SimTK::Array_<GaitPhaseState::LegPhase>(
-            MEMORY, GaitPhaseState::LegPhase::INVALID));
+            _windowSize, GaitPhaseState::LegPhase::INVALID));
 
     // init leading leg state
     leadingLeg = GaitPhaseState::LeadingLeg::INVALID;
@@ -104,13 +105,15 @@ void GaitPhaseDetector::updDetectorState(const double& t,
     Tto.left = (detectTO(phaseWindowL)) ? t : Tto.left;
     Ths.right = (detectHS(phaseWindowR)) ? t : Ths.right;
     Ths.left = (detectHS(phaseWindowL)) ? t : Ths.left;
-    if (Tto.left > Ths.right && leadingLeg == GaitPhaseState::LeadingLeg::RIGHT) Tds = Tto.left - Ths.right;
-    if (Tto.right > Ths.left && leadingLeg == GaitPhaseState::LeadingLeg::LEFT) Tds = Tto.right - Ths.left;
-    if (Ths.left > Tto.left && leadingLeg == GaitPhaseState::LeadingLeg::LEFT) Tss = Ths.left - Tto.left;
-    if (Ths.right > Tto.right && leadingLeg == GaitPhaseState::LeadingLeg::RIGHT) Tss = Ths.right - Tto.right;
-
-    // std::cout << Tto.left - Ths.right << " " << Tto.right - Ths.left <<
-    // std::endl;
+    if (Tto.left > Ths.right && leadingLeg == GaitPhaseState::LeadingLeg::RIGHT)
+        Tds = Tto.left - Ths.right;
+    if (Tto.right > Ths.left && leadingLeg == GaitPhaseState::LeadingLeg::LEFT)
+        Tds = Tto.right - Ths.left;
+    if (Ths.left > Tto.left && leadingLeg == GaitPhaseState::LeadingLeg::LEFT)
+        Tss = Ths.left - Tto.left;
+    if (Ths.right > Tto.right &&
+        leadingLeg == GaitPhaseState::LeadingLeg::RIGHT)
+        Tss = Ths.right - Tto.right;
 
     // update gait phase
     gaitPhase = updGaitPhase(phaseR, phaseL);

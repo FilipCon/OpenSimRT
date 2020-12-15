@@ -87,7 +87,7 @@ BasicModelVisualizer::BasicModelVisualizer(const OpenSim::Model& otherModel)
 
     // add fps decorator
     fps = new FPSDecorator();
-    visualizer->addDecorationGenerator(fps);
+    visualizer->addDecorationGenerator(fps.get());
 #endif
 }
 
@@ -127,6 +127,16 @@ void BasicModelVisualizer::update(const Vector& q,
         THROW_EXCEPTION("End Simulation. Bye!");
     }
 #endif
+}
+
+void BasicModelVisualizer::updateReactionForceDecorator(
+        const Vector_<SpatialVec>& reactionWrench, const string& reactionOnBody,
+        ForceDecorator* reactionForceDecorator) {
+    auto bodyIndex = model.getBodySet().getIndex(reactionOnBody, 0);
+    const auto& body = model.getBodySet()[bodyIndex];
+    auto force = -reactionWrench[bodyIndex](1); // mirror force (1)
+    auto joint = body.findStationLocationInGround(state, Vec3(0));
+    reactionForceDecorator->update(joint, force);
 }
 
 void BasicModelVisualizer::addDecorationGenerator(

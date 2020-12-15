@@ -1,6 +1,7 @@
 #include "GRFMPrediction.h"
 
 #include "GaitPhaseDetector.h"
+#include "OpenSimUtils.h"
 #include "Simulation.h"
 
 #include <SimTKcommon/SmallMatrix.h>
@@ -12,36 +13,38 @@ using namespace OpenSim;
 using namespace OpenSimRT;
 using namespace SimTK;
 
-#define NEWTON_EULER_METHOD
-// #define ID_METHOD
-
-#define BUFFER_SIZE 10 // sliding window size for mean gait direction
-
 // compute the projection of a point or vector on a arbitrary plane
 static Vec3 projectionOnPlane(const Vec3& point, const Vec3& planeOrigin,
                               const Vec3& planeNormal) {
     return point - SimTK::dot(point - planeOrigin, planeNormal) * planeNormal;
 }
 
+template <typename T> T clip(const T& n, const T& lower, const T& upper) {
+    return std::max(lower, std::min(n, upper));
+}
 //==============================================================================
 
 GRFMPrediction::GRFMPrediction(const Model& otherModel,
-                               const Parameters& otherParameters,
+                               const Parameters& aParameters,
                                GaitPhaseDetector* detector)
-        : model(*otherModel.clone()), parameters(otherParameters),
-          gaitPhaseDetector(detector) {
+        : model(*otherModel.clone()), gaitPhaseDetector(detector),
+          parameters(aParameters) {
     // reserve memory size for computing the mean gait direction
-    gaitDirectionBuffer.setSize(BUFFER_SIZE);
+    gaitDirectionBuffer.setSize(parameters.directionWindowSize);
 
     // add station points to the model for the CoP trajectory
-    heelStationR = new Station(model.getBodySet().get("calcn_r"),
-                               Vec3(0.014, -0.0168, -0.0055));
-    heelStationL = new Station(model.getBodySet().get("calcn_l"),
-                               Vec3(0.014, -0.0168, 0.0055));
-    toeStationR = new Station(model.getBodySet().get("calcn_r"),
-                              Vec3(0.24, -0.0168, -0.00117));
-    toeStationL = new Station(model.getBodySet().get("calcn_l"),
-                              Vec3(0.24, -0.0168, 0.00117));
+    heelStationR =
+            new Station(model.getBodySet().get(parameters.rStationBodyName),
+                        parameters.rHeelStationLocation);
+    heelStationL =
+            new Station(model.getBodySet().get(parameters.lStationBodyName),
+                        parameters.lHeelStationLocation);
+    toeStationR =
+            new Station(model.getBodySet().get(parameters.rStationBodyName),
+                        parameters.rToeStationLocation);
+    toeStationL =
+            new Station(model.getBodySet().get(parameters.lStationBodyName),
+                        parameters.lToeStationLocation);
     heelStationR->setName("heel_station_point_r");
     heelStationL->setName("heel_station_point_l");
     toeStationR->setName("toe_station_point_r");
@@ -51,71 +54,33 @@ GRFMPrediction::GRFMPrediction(const Model& otherModel,
     model.addModelComponent(toeStationR.get());
     model.addModelComponent(toeStationL.get());
 
+    // disable muscles, otherwise they apply passive forces
+    OpenSimUtils::disableActuators(model);
+
     // initialize system
     state = model.initSystem();
 
-    // disable muscles, otherwise they apply passive forces
-    for (int i = 0; i < model.getMuscles().getSize(); ++i) {
-        model.updMuscles()[i].setAppliesForce(state, false);
-    }
-
-    // exponential STA by Ren et al.
-    exponentialTransition = [&](const double& t) -> double {
-        return exp(-pow((2.0 * t / Tds), 3));
-    };
-
-    // // Anterior GRF (f_x) sigmoid_with_bump parameters
-    // auto k1 = exp(4.0 / 9.0);
-    // auto k2 = k1 * exp(-16.0 / 9.0) / 2.0;
-    // anteriorForceTransition = [=](const double& t) -> double {
-    //     auto Tp = Tds / 3.0;
-    //     return k1 * exp(-pow(2.0 * (t - Tp) / Tds, 2)) - 2.0 * k2 * t / Tds;
-    // };
-
-    // Anterior GRF (f_x) sigmoid_with_bump parameters
+    // STA functions by Ren et al.
     anteriorForceTransition = [&](const double& t) -> double {
-        double A = 0;
-        double K = 1;
-        double B = 25.974456748001113;
-        double M = 0.7520304912335662;
-        double m1 = 0.4470939749685837;
-        double m2 = 0.43955467948725574;
-        double c = 0.03350169202846608;
-        return A + K / (1.0 + exp(B * (t - m1 * Tds))) +
-               M * exp(-pow((t - m2 * Tds), 2) / (2.0 * pow(c, 2)));
+        auto k1 = exp(4.0 / 9.0);
+        auto k2 = k1 * exp(-16.0 / 9.0) / 2.0;
+        auto Tp = Tds / 3.0;
+        return k1 * exp(-pow(2.0 * (t - Tp) / Tds, 2)) - 2.0 * k2 * t / Tds;
     };
 
-    // Vertical GRF (f_y) logistic parameters
-    verticalForceTransition = [&](const double& t) -> double {
-        double A = 1.1193681826492452;
-        double K = -1.6038212670613377;
-        double C = 3.037706815056258;
-        double B = 61.29534891423534;
-        double Q = 0.5067639996015457;
-        double m = 0.9396455521564754;
-        double v = 0.42306183726767493;
-        return A + K / pow((C + Q * exp(-B * (t - m * Tds))), v);
-    };
-
-    // Lateral GRF (f_z) logistic parameters
-    lateralForceTransition = [&](const double& t) -> double {
-        double A = 1.1320519858489442;
-        double K = -2.80801945666771;
-        double C = 3.2237306408637867;
-        double B = 55.194506993478576;
-        double Q = 0.3923571148441916;
-        double m = 0.7334108958330988;
-        double v = 0.7682144104771099;
-        return A + K / pow((C + Q * exp(-B * (t - m * Tds))), v);
+    reactionComponentTransition = [&](const double& t) -> double {
+        return exp(-pow((2.0 * t / Tds), 3));
     };
 
     // CoP trajectory (linear transition from heel -> metatarsal)
     copPosition = [&](const double& t, const Vec3& d) -> Vec3 {
         const auto omega = 2.0 * Pi / Tss;
-        const auto offset = -2 * d / (3 * Pi) *
-                            (sin(omega * t) - sin(2 * omega * t) / 8 -
-                             3.0 / 4.0 * omega * t);
-        return (offset.norm() >= d.norm()) ? d : offset;
+        const auto scale =
+                clip(-2.0 / (3 * Pi) *
+                             (sin(omega * t) - sin(2 * omega * t) / 8 -
+                              3.0 / 4.0 * omega * t),
+                     0.0, 1.0);
+        return scale * d;
     };
 }
 
@@ -140,71 +105,67 @@ void GRFMPrediction::computeTotalReactionComponents(const Input& input,
     const auto& matter = model.getMatterSubsystem();
 
     // total forces / moments
-    // =========================================================================
-    // method 1: compute total forces/moment from pelvis using ID
-    // =========================================================================
-#ifdef ID_METHOD
-    // get applied mobility (generalized) forces generated by components of
-    // the model, like actuators
-    const Vector& appliedMobilityForces =
-            model.getMultibodySystem().getMobilityForces(state,
-                                                         Stage::Dynamics);
+    if (parameters.method == "ID") {
+        // =========================================================================
+        // method 1: compute total forces/moment from pelvis using ID
+        // =========================================================================
+        // get applied mobility (generalized) forces generated by components of
+        // the model, like actuators
+        const Vector& appliedMobilityForces =
+                model.getMultibodySystem().getMobilityForces(state,
+                                                             Stage::Dynamics);
 
-    // get all applied body forces like those from contact
-    const Vector_<SpatialVec>& appliedBodyForces =
-            model.getMultibodySystem().getRigidBodyForces(state,
-                                                          Stage::Dynamics);
+        // get all applied body forces like those from contact
+        const Vector_<SpatialVec>& appliedBodyForces =
+                model.getMultibodySystem().getRigidBodyForces(state,
+                                                              Stage::Dynamics);
 
-    // perform inverse dynamics
-    Vector tau;
-    model.getMultibodySystem()
-            .getMatterSubsystem()
-            .calcResidualForceIgnoringConstraints(state, appliedMobilityForces,
-                                                  appliedBodyForces,
-                                                  input.qDDot, tau);
+        // perform inverse dynamics
+        Vector tau;
+        model.getMultibodySystem()
+                .getMatterSubsystem()
+                .calcResidualForceIgnoringConstraints(
+                        state, appliedMobilityForces, appliedBodyForces,
+                        input.qDDot, tau);
 
-    //==========================================================================
-    // spatial forces/moments in pelvis wrt the ground
-    Vector_<SpatialVec> spatialGenForces;
-    matter.multiplyBySystemJacobian(state, tau, spatialGenForces);
-    // const auto& pelvisJoint = model.getJointSet().get("ground_pelvis");
-    // const auto& idx = pelvisJoint.getChildFrame().getMobilizedBodyIndex();
-    const auto& idx = model.getBodySet().get("ground").getMobilizedBodyIndex();
-    totalReactionForce = spatialGenForces[idx][1];
-    totalReactionMoment = spatialGenForces[idx][0];
+        //==========================================================================
+        // spatial forces/moments in pelvis wrt the ground
+        Vector_<SpatialVec> spatialGenForces;
+        matter.multiplyBySystemJacobian(state, tau, spatialGenForces);
+        const auto& idx = model.getBodySet()
+                                  .get(parameters.pelvisBodyName)
+                                  .getMobilizedBodyIndex();
+        totalReactionForce = spatialGenForces[idx][1];
+        totalReactionMoment = spatialGenForces[idx][0];
 
-#endif
+        // =========================================================================
+        // method 2: compute the reaction forces/moment based on the
+        // Newton-Euler equations
+        //==========================================================================
+    } else if (parameters.method == "Newton-Euler") {
+        // compute body velocities and accelerations
+        SimTK::Vector_<SimTK::SpatialVec> bodyVelocities;
+        SimTK::Vector_<SimTK::SpatialVec> bodyAccelerations;
+        matter.multiplyBySystemJacobian(state, input.qDot, bodyVelocities);
+        matter.calcBodyAccelerationFromUDot(state, input.qDDot,
+                                            bodyAccelerations);
 
-    // =========================================================================
-    // method 2: compute the reaction forces/moment based on the
-    // Newton-Euler equations
-    //==========================================================================
-#ifdef NEWTON_EULER_METHOD
-    // compute body velocities and accelerations
-    SimTK::Vector_<SimTK::SpatialVec> bodyVelocities;
-    SimTK::Vector_<SimTK::SpatialVec> bodyAccelerations;
-    matter.multiplyBySystemJacobian(state, input.qDot, bodyVelocities);
-    matter.calcBodyAccelerationFromUDot(state, input.qDDot, bodyAccelerations);
+        // compute total force / moments
+        for (int i = 0; i < model.getNumBodies(); ++i) {
+            const auto& body = model.getBodySet()[i];
+            const auto& bix = body.getMobilizedBodyIndex();
 
-    // compute total force / moments
-    for (int i = 0; i < model.getNumBodies(); ++i) {
-        const auto& body = model.getBodySet()[i];
-        const auto& bix = body.getMobilizedBodyIndex();
+            // F_ext = sum(m_i * (a_i - g) )
+            totalReactionForce += body.getMass() * (bodyAccelerations[bix][1] -
+                                                    model.getGravity());
 
-        // F_ext = sum(m_i * (a_i - g) )
-        totalReactionForce += body.getMass() *
-                              (bodyAccelerations[bix][1] - model.getGravity());
-
-        // M_ext = sum( I_i * omega_dot + omega x (I_i * omega)
-        // - sum_j( r_ij x F_ij )) // TODO negative term is still
-        // unspecified...
-        const auto& I = body.getInertia();
-        totalReactionMoment +=
-                I * bodyAccelerations[bix][0] +
-                cross(bodyVelocities[bix][0], I * bodyVelocities[bix][0]);
+            // M_ext = sum( I_i * omega_dot + omega x (I_i * omega)
+            const auto& I = body.getInertia();
+            totalReactionMoment +=
+                    I * bodyAccelerations[bix][0] +
+                    cross(bodyVelocities[bix][0], I * bodyVelocities[bix][0]);
+        }
     }
-
-#endif
 }
 
 SimTK::Rotation
@@ -215,8 +176,7 @@ GRFMPrediction::computeGaitDirectionRotation(const std::string& bodyName) {
             body.getMobilizedBodyIndex());
     const auto& R_GB = mob.getBodyTransform(state).R();
     gaitDirectionBuffer.insert((~R_GB).col(0).asVec3());
-    auto meanDirection = gaitDirectionBuffer.mean();
-    auto gaitDirection = projectionOnPlane(meanDirection, Vec3(0),
+    auto gaitDirection = projectionOnPlane(gaitDirectionBuffer.mean(), Vec3(0),
                                            Vec3(0, 1, 0));
 
     // rotation about the vertical axis to transform the reaction components
@@ -248,10 +208,10 @@ GRFMPrediction::solve(const GRFMPrediction::Input& input) {
         // update model state
         updateState(input, model, state, Stage::Dynamics);
 
-        auto R = computeGaitDirectionRotation("pelvis");
+        auto R = computeGaitDirectionRotation(parameters.pelvisBodyName);
 
         // compute total reaction force/moment
-        Vec3 totalReactionForce, totalReactionMoment;
+        Vec3 totalReactionForce(0), totalReactionMoment(0);
         computeTotalReactionComponents(input, totalReactionForce,
                                        totalReactionMoment);
         totalReactionForce = R * totalReactionForce;
@@ -260,15 +220,16 @@ GRFMPrediction::solve(const GRFMPrediction::Input& input) {
         // smooth transition assumption - forces
         Vec3 rightReactionForce, leftReactionForce;
         seperateReactionComponents(totalReactionForce, anteriorForceTransition,
-                                   verticalForceTransition,
-                                   lateralForceTransition, rightReactionForce,
-                                   leftReactionForce);
+                                   reactionComponentTransition,
+                                   reactionComponentTransition,
+                                   rightReactionForce, leftReactionForce);
 
         // smooth transition assumption - moments
         Vec3 rightReactionMoment, leftReactionMoment;
-        seperateReactionComponents(totalReactionMoment, exponentialTransition,
-                                   exponentialTransition, exponentialTransition,
-                                   rightReactionMoment, leftReactionMoment);
+        seperateReactionComponents(
+                totalReactionMoment, reactionComponentTransition,
+                reactionComponentTransition, reactionComponentTransition,
+                rightReactionMoment, leftReactionMoment);
         // point
         Vec3 rightPoint, leftPoint;
         computeReactionPoint(rightPoint, leftPoint);
@@ -295,6 +256,7 @@ void GRFMPrediction::seperateReactionComponents(
     case GaitPhaseState::GaitPhase::DOUBLE_SUPPORT: {
         // time since last HS
         double time = t - gaitPhaseDetector->getHeelStrikeTime();
+        if (time == 0.0) totalReactionAtThs = totalReactionComponent;
 
         // previous DS time-period
         Tds = gaitPhaseDetector->getDoubleSupportDuration();
@@ -304,11 +266,11 @@ void GRFMPrediction::seperateReactionComponents(
 
         // trailing leg component
         trailingReactionComponent[0] =
-                totalReactionComponent[0] * anteriorComponentFunction(time);
+                totalReactionAtThs[0] * anteriorComponentFunction(time);
         trailingReactionComponent[1] =
-                totalReactionComponent[1] * verticalComponentFunction(time);
+                totalReactionAtThs[1] * verticalComponentFunction(time);
         trailingReactionComponent[2] =
-                totalReactionComponent[2] * lateralComponentFunction(time);
+                totalReactionAtThs[2] * lateralComponentFunction(time);
 
         // leading leg component
         leadingReactionComponent =
@@ -358,20 +320,12 @@ void GRFMPrediction::computeReactionPoint(SimTK::Vec3& rightPoint,
         // first determine leading / trailing leg
         switch (gaitPhaseDetector->getLeadingLeg()) {
         case GaitPhaseState::LeadingLeg::RIGHT: {
-            rightPoint = projectionOnPlane(
-                    heelStationR->getLocationInGround(state),
-                    parameters.plane_origin, parameters.plane_normal);
-            leftPoint = projectionOnPlane(
-                    toeStationL->getLocationInGround(state),
-                    parameters.plane_origin, parameters.plane_normal);
+            rightPoint = heelStationR->getLocationInGround(state);
+            leftPoint = toeStationL->getLocationInGround(state);
         } break;
         case GaitPhaseState::LeadingLeg::LEFT: {
-            rightPoint = projectionOnPlane(
-                    toeStationR->getLocationInGround(state),
-                    parameters.plane_origin, parameters.plane_normal);
-            leftPoint = projectionOnPlane(
-                    heelStationL->getLocationInGround(state),
-                    parameters.plane_origin, parameters.plane_normal);
+            rightPoint = toeStationR->getLocationInGround(state);
+            leftPoint = heelStationL->getLocationInGround(state);
         } break;
         case GaitPhaseState::LeadingLeg::INVALID: {
             cerr << "CoP: invalid LeadingLeg state!" << endl;
@@ -387,13 +341,10 @@ void GRFMPrediction::computeReactionPoint(SimTK::Vec3& rightPoint,
         // time since last toe-off event
         auto time = t - gaitPhaseDetector->getToeOffTime();
 
-        // cout << Tss << " " << time << endl;
-
         // result CoP
         leftPoint = Vec3(0);
-        rightPoint = projectionOnPlane(
-                heelStationR->getLocationInGround(state) + copPosition(time, d),
-                parameters.plane_origin, parameters.plane_normal);
+        rightPoint =
+                heelStationR->getLocationInGround(state) + copPosition(time, d);
     } break;
 
     case GaitPhaseState::GaitPhase::RIGHT_SWING: {
@@ -406,9 +357,8 @@ void GRFMPrediction::computeReactionPoint(SimTK::Vec3& rightPoint,
 
         // result CoP
         rightPoint = Vec3(0);
-        leftPoint = projectionOnPlane(
-                heelStationL->getLocationInGround(state) + copPosition(time, d),
-                parameters.plane_origin, parameters.plane_normal);
+        leftPoint =
+                heelStationL->getLocationInGround(state) + copPosition(time, d);
     } break;
 
     default: {

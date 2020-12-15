@@ -1,6 +1,7 @@
 #ifndef REAL_TIME_ANALYSIS_H
 #define REAL_TIME_ANALYSIS_H
 
+#include "GRFMPrediction.h"
 #include "OpenSimUtils.h"
 #include "SignalProcessing.h"
 #include "Simulation.h"
@@ -24,6 +25,10 @@ struct RealTime_API MotionCaptureInput {
  * acquisition should be handled by throwing an exception.
  */
 typedef std::function<MotionCaptureInput()> DataAcquisitionFunction;
+typedef std::function<void()> ExternalPhaseDetectorUpdateFunction;
+typedef std::function<void(const double& t, const SimTK::Vector& q,
+                           const SimTK::Vector& qd, const SimTK::Vector& qdd)>
+        InternalPhaseDetectorUpdateFunction;
 
 /**
  * \brief TODO
@@ -73,23 +78,38 @@ class RealTime_API RealTimeAnalysis {
         SimTK::Vector reactionWrench;
     } output;
 
+    enum class PhaseDetectorUpdateMethod { INTERNAL, EXTERNAL };
+
     struct Parameters {
         bool useVisualizer;
+        bool useGRFMPrediction;
         bool solveMuscleOptimization;
+
         std::vector<InverseKinematics::MarkerTask> ikMarkerTasks;
         std::vector<InverseKinematics::IMUTask> ikIMUTasks;
         double ikConstraintsWeight;
         double ikAccuracy;
+
         std::vector<ExternalWrench::Parameters> wrenchParameters;
-        MuscleOptimization::OptimizationParameters muscleOptimizationParameters;
+        std::vector<std::string> reactionForceOnBodies;
+
         LowPassSmoothFilterTS::Parameters filterParameters;
+        MuscleOptimization::OptimizationParameters muscleOptimizationParameters;
+
+        PhaseDetectorUpdateMethod detectorUpdateMethod;
+        SimTK::ReferencePtr<GaitPhaseDetector> phaseDetector;
+        ExternalPhaseDetectorUpdateFunction externalPhaseDetectorUpdateFunction;
+        InternalPhaseDetectorUpdateFunction internalPhaseDetectorUpdateFunction;
+        GRFMPrediction::Parameters grfmParameters;
+
         MomentArmFunctionT momentArmFunction;
         DataAcquisitionFunction dataAcquisitionFunction;
-        std::vector<std::string> reactionForceOnBodies;
+
     } parameters;
 
     // modules
     SimTK::ReferencePtr<LowPassSmoothFilterTS> lowPassFilter;
+    SimTK::ReferencePtr<GRFMPrediction> grfmPrediction;
     SimTK::ReferencePtr<InverseKinematics> inverseKinematics;
     SimTK::ReferencePtr<InverseDynamics> inverseDynamics;
     SimTK::ReferencePtr<MuscleOptimization> muscleOptimization;

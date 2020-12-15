@@ -17,7 +17,7 @@ class RealTime_API ExternalForceBasedPhaseDetector : public GaitPhaseDetector {
     struct Parameters {
         // stance/swing threshold
         double threshold;
-        size_t consecutive_values;
+        int windowSize;
     };
 
     ExternalForceBasedPhaseDetector(const Parameters& parameters);
@@ -27,7 +27,7 @@ class RealTime_API ExternalForceBasedPhaseDetector : public GaitPhaseDetector {
  private:
     Parameters parameters;
 
-    SlidingWindow<double> rSlidingWindow;
-    SlidingWindow<double> lSlidingWindow;
+    // SlidingWindow<double> rSlidingWindow;
+    // SlidingWindow<double> lSlidingWindow;
 };
 } // namespace OpenSimRT

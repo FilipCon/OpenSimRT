@@ -80,7 +80,6 @@ template <typename ETX = double> class SyncManager {
         }
 
         // initialize output
-        size_t columnId = 0;
         std::vector<SimTK::Vector_<ETX>> pack;
         if (isNewRowFinite && (t2 <= v.back()) && !SimTK::isInf(t)) {
             // delete all rows from the orifinal table up to the _currentTime
@@ -97,6 +96,7 @@ template <typename ETX = double> class SyncManager {
             _currentTime += 1 / _samplingRate;
 
             // create output
+            size_t columnId = 0;
             for (size_t i = 0; i < _numOfPacks; ++i) {
                 pack.push_back(
                         ~_table.getRow(t)(columnId, _vectorSizePerPack[i]));
@@ -233,10 +233,6 @@ template <typename ETX = double> class SyncManager {
             // increase column offset to append the next pair
             _offset += p.second.size();
         });
-
-        // SimTK::Array_<ETX> ar(_table.getIndependentColumn());
-        // std::cout << std::setprecision(15) << "Time: " << ar << std::endl;
-        // std::cout << "Mat: " << _table.getMatrix() << std::endl;
     }
 
     // append row to table

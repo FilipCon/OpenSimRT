@@ -5,23 +5,42 @@
 #include "SignalProcessing.h"
 #include "internal/RealTimeExports.h"
 
+#include <SimTKcommon/internal/ReferencePtr.h>
 #include <SimTKcommon/internal/State.h>
 #include <Simulation/Model/Model.h>
+#include <simmath/Differentiator.h>
+#include <string>
 namespace OpenSimRT {
 
 class RealTime_API AccelerationBasedPhaseDetector : public GaitPhaseDetector {
  public:
     struct Parameters {
-        // stance/swing threshold
-        double acc_threshold;
-        double vel_threshold;
-        size_t consecutive_values;
-        LowPassSmoothFilter::Parameters filterParameters;
+        double accThreshold;
+        double velThreshold;
+
+        int windowSize;
+
+        std::string rFootBodyName;
+        std::string lFootBodyName;
+        SimTK::Vec3 rHeelLocationInFoot;
+        SimTK::Vec3 rToeLocationInFoot;
+        SimTK::Vec3 lHeelLocationInFoot;
+        SimTK::Vec3 lToeLocationInFoot;
+
+        double samplingFrequency;
+        double accLPFilterFreq;
+        double velLPFilterFreq;
+        double posLPFilterFreq;
+        int accLPFilterOrder;
+        int velLPFilterOrder;
+        int posLPFilterOrder;
+
+        int posDiffOrder;
+        int velDiffOrder;
     };
 
     AccelerationBasedPhaseDetector(const OpenSim::Model& otherModel,
-                               const Parameters& parameters);
-
+                                   const Parameters& parameters);
     void updDetector(const GRFMPrediction::Input& input);
 
  private:
@@ -29,10 +48,11 @@ class RealTime_API AccelerationBasedPhaseDetector : public GaitPhaseDetector {
     SimTK::State state;
     Parameters parameters;
 
-    SlidingWindow<SimTK::Vec4> rSlidingWindow;
-    SlidingWindow<SimTK::Vec4> lSlidingWindow;
-
-    SimTK::ReferencePtr<LowPassSmoothFilter> filter;
+    SimTK::ReferencePtr<ButterworthFilter> posFilter;
+    SimTK::ReferencePtr<ButterworthFilter> velFilter;
+    SimTK::ReferencePtr<ButterworthFilter> accFilter;
+    SimTK::ReferencePtr<NumericalDifferentiator> posDiff;
+    SimTK::ReferencePtr<NumericalDifferentiator> velDiff;
 
     // station points
     SimTK::ReferencePtr<OpenSim::Station> heelStationR;

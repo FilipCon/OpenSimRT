@@ -31,7 +31,7 @@ class IMU_API IMUCalibrator {
 
     void recordNumOfSamples(const size_t& numSamples);
 
-    SimTK::Rotation computeheadingRotation(const std::string& baseImuName,
+    SimTK::Rotation computeHeadingRotation(const std::string& baseImuName,
                                 const std::string& imuDirectionAxis);
     void calibrateIMUTasks(std::vector<InverseKinematics::IMUTask>& imuTasks);
 

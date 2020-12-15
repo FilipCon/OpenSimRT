@@ -81,6 +81,10 @@ class Common_API BasicModelVisualizer {
     // Update visualizer state.
     void update(const SimTK::Vector& q,
                 const SimTK::Vector& muscleActivations = SimTK::Vector());
+    void updateReactionForceDecorator(
+            const SimTK::Vector_<SimTK::SpatialVec>& reactionWrench,
+            const std::string& reactionOnBody,
+            ForceDecorator* reactionForceDecorator);
     // Add decoration generator to the visualizer (take ownership of the
     // memory).
     void addDecorationGenerator(SimTK::DecorationGenerator* generator);

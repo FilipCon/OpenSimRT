@@ -13,8 +13,10 @@
 #ifdef __cplusplus
 extern "C" {
     MomentArm_API SimTK::Matrix calcMomentArm(const SimTK::Vector& q) OPTIMIZATION;
+#ifndef WIN32
     MomentArm_API std::vector<std::string> getModelMuscleSymbolicOrder() OPTIMIZATION;
     MomentArm_API std::vector<std::string> getModelCoordinateSymbolicOrder() OPTIMIZATION;
+#endif
 }
 #endif
 

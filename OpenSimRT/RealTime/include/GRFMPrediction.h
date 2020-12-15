@@ -25,7 +25,6 @@ void updateState(const T& input, const OpenSim::Model& model,
         coordinateSet[i]->setValue(state, input.q[i]);
         coordinateSet[i]->setSpeedValue(state, input.qDot[i]);
     }
-    state.updTime() = input.t;
     model.getMultibodySystem().realize(state, stage);
 }
 
@@ -54,8 +53,8 @@ template <typename T> struct SlidingWindow {
 
     // compute mean value
     T mean() {
-        return 1.0 * std::accumulate(data.begin(), data.end(), T()) /
-               int(data.size());
+        return std::move(1.0 * std::accumulate(data.begin(), data.end(), T()) /
+                         int(data.size()));
     }
 
     bool equal(const T& x) {
@@ -99,6 +98,14 @@ class RealTime_API GRFMPrediction {
             CoPTrajectory;
 
  public:
+    struct Parameters {
+        int directionWindowSize;
+        std::string method; // Newton-Euler, ID
+        std::string pelvisBodyName;
+        std::string rStationBodyName, lStationBodyName;
+        SimTK::Vec3 rHeelStationLocation, lHeelStationLocation;
+        SimTK::Vec3 rToeStationLocation, lToeStationLocation;
+    };
     struct Input {
         double t;
         SimTK::Vector q;
@@ -114,12 +121,6 @@ class RealTime_API GRFMPrediction {
         SimTK::Vector asVector();
     };
 
-    struct Parameters {
-        double threshold = 0; // threshold
-        SimTK::Vec3 plane_origin = SimTK::Vec3(0);
-        SimTK::Vec3 plane_normal = SimTK::Vec3(0, 1, 0);
-    } parameters;
-
     // constructor
     GRFMPrediction() = default;
     GRFMPrediction(const OpenSim::Model&, const Parameters&,
@@ -131,15 +132,12 @@ class RealTime_API GRFMPrediction {
  private:
     // transition functions based on the STA
     TransitionFuction anteriorForceTransition;
-    TransitionFuction verticalForceTransition;
-    TransitionFuction lateralForceTransition;
-    TransitionFuction exponentialTransition;
-    // TODO experiment with different functions
-    // TODO implement for moments if required
+    TransitionFuction reactionComponentTransition;
 
     // function that describes the CoP trajectory during gait
     CoPTrajectory copPosition;
 
+    SimTK::Vec3 totalReactionAtThs;
     double t, Tds, Tss; // current simulation time, double support and single
                         // support period
 
@@ -148,6 +146,7 @@ class RealTime_API GRFMPrediction {
 
     OpenSim::Model model;
     SimTK::State state;
+    Parameters parameters;
 
     // gait phase detection
     SimTK::ReferencePtr<GaitPhaseDetector> gaitPhaseDetector;

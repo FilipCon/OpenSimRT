@@ -17,9 +17,8 @@ using namespace OpenSimRT;
 using namespace SimTK;
 
 ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
-        const Model& otherModel,
-        const GRFMPrediction::Parameters& otherParameters)
-        : GaitPhaseDetector(), model(*otherModel.clone()),
+        const Model& otherModel, const Parameters& otherParameters)
+        : GaitPhaseDetector(otherParameters.windowSize), model(*otherModel.clone()),
           parameters(otherParameters) {
     // add elements to a copy of the original model....
 
@@ -28,9 +27,9 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     model.addBody(platform);
 
     // weld joint
-    auto platformToGround = new WeldJoint(
-            "PlatformToGround", model.getGround(), Vec3(0), Vec3(0), *platform,
-            -parameters.plane_origin, Vec3(0));
+    auto platformToGround = new WeldJoint("PlatformToGround", model.getGround(),
+                                          Vec3(0), Vec3(0), *platform,
+                                          -parameters.plane_origin, Vec3(0));
     model.addJoint(platformToGround);
 
     // contact half-space
@@ -114,8 +113,11 @@ void ContactForceBasedPhaseDetector::updDetector(
     Vec3 leftContactForce(-leftContactWrench.get(0), -leftContactWrench.get(1),
                           -leftContactWrench.get(2));
 
+    double rPhase =
+            (rightContactForce.norm() - parameters.threshold > 0) ? 1 : -1;
+    double lPhase =
+            (leftContactForce.norm() - parameters.threshold > 0) ? 1 : -1;
+
     // update detector internal state
-    updDetectorState(state.getTime(),
-                     rightContactForce.norm() - parameters.threshold,
-                     leftContactForce.norm() - parameters.threshold);
+    updDetectorState(input.t, rPhase, lPhase);
 }

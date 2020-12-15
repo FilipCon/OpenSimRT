@@ -190,7 +190,7 @@ NGIMUInputDriver::asPairsOfVectors(const IMUDataFrame& imuDataFrame) {
     return std::move(res);
 }
 
-OpenSim::TimeSeriesTable NGIMUInputDriver::initializeLogger() {
+OpenSim::TimeSeriesTable NGIMUInputDriver::initializeLogger() const {
     vector<string> suffixes = {
             "_q1",       "_q2",       "_q3",      "_q4",        "_ax",
             "_ay",       "_az",       "_gx",      "_gy",        "_gz",

@@ -11,24 +11,42 @@ using namespace OpenSimRT;
 
 AccelerationBasedPhaseDetector::AccelerationBasedPhaseDetector(
         const OpenSim::Model& otherModel, const Parameters& otherParameters)
-        : GaitPhaseDetector(), model(*otherModel.clone()),
-          parameters(otherParameters) {
-    rSlidingWindow.init(SimTK::Array_<SimTK::Vec4>(
-            parameters.consecutive_values, SimTK::Vec4(0.0)));
-    lSlidingWindow.init(SimTK::Array_<SimTK::Vec4>(
-            parameters.consecutive_values, SimTK::Vec4(0.0)));
+        : GaitPhaseDetector(otherParameters.windowSize),
+          model(*otherModel.clone()), parameters(otherParameters) {
+    posFilter = new ButterworthFilter(12, parameters.posLPFilterOrder,
+                                      (2 * parameters.posLPFilterFreq) /
+                                              parameters.samplingFrequency,
+                                      ButterworthFilter::FilterType::LowPass,
+                                      IIRFilter::InitialValuePolicy::Zero);
 
-    filter = new LowPassSmoothFilter(parameters.filterParameters);
+    velFilter = new ButterworthFilter(12, parameters.velLPFilterOrder,
+                                      (2 * parameters.velLPFilterFreq) /
+                                              parameters.samplingFrequency,
+                                      ButterworthFilter::FilterType::LowPass,
+                                      IIRFilter::InitialValuePolicy::Zero);
+
+    accFilter = new ButterworthFilter(12, parameters.accLPFilterOrder,
+                                      (2 * parameters.accLPFilterFreq) /
+                                              parameters.samplingFrequency,
+                                      ButterworthFilter::FilterType::LowPass,
+                                      IIRFilter::InitialValuePolicy::Zero);
+
+    posDiff = new NumericalDifferentiator(12, parameters.posDiffOrder);
+    velDiff = new NumericalDifferentiator(12, parameters.velDiffOrder);
 
     // add station points to the model for the CoP trajectory
-    heelStationR = new OpenSim::Station(model.getBodySet().get("calcn_r"),
-                                        SimTK::Vec3(0.014, -0.0168, -0.0055));
-    heelStationL = new OpenSim::Station(model.getBodySet().get("calcn_l"),
-                                        SimTK::Vec3(0.014, -0.0168, 0.0055));
-    toeStationR = new OpenSim::Station(model.getBodySet().get("calcn_r"),
-                                       SimTK::Vec3(0.24, -0.0168, -0.00117));
-    toeStationL = new OpenSim::Station(model.getBodySet().get("calcn_l"),
-                                       SimTK::Vec3(0.24, -0.0168, 0.00117));
+    heelStationR = new OpenSim::Station(
+            model.getBodySet().get(parameters.rFootBodyName),
+            parameters.rHeelLocationInFoot);
+    heelStationL = new OpenSim::Station(
+            model.getBodySet().get(parameters.lFootBodyName),
+            parameters.lHeelLocationInFoot);
+    toeStationR = new OpenSim::Station(
+            model.getBodySet().get(parameters.rFootBodyName),
+            parameters.rToeLocationInFoot);
+    toeStationL = new OpenSim::Station(
+            model.getBodySet().get(parameters.lFootBodyName),
+            parameters.lToeLocationInFoot);
     model.addModelComponent(heelStationR.get());
     model.addModelComponent(heelStationL.get());
     model.addModelComponent(toeStationR.get());
@@ -56,43 +74,22 @@ void AccelerationBasedPhaseDetector::updDetector(
     v(6, 3) = SimTK::Vector(rToePos);
     v(9, 3) = SimTK::Vector(lToePos);
 
-    // filter position
-    auto filtered = filter->filter({input.t, SimTK::Vector(v)});
-    auto x = filtered.x;
-    auto xDot = filtered.xDot;
-    auto xDDot = filtered.xDDot;
+    // filter and differentiation
+    auto x = posFilter->filter(v);
+    auto xDot = velFilter->filter(posDiff->diff(input.t, x));
+    auto xDDot = accFilter->filter(velDiff->diff(input.t, xDot));
 
-    // get station velocities and accelerations
-    auto rHeelVel = SimTK::Vec3(&xDot[0]);
-    auto lHeelVel = SimTK::Vec3(&xDot[3]);
-    auto rToeVel = SimTK::Vec3(&xDot[6]);
-    auto lToeVel = SimTK::Vec3(&xDot[9]);
+    // get station and accelerations
     auto rHeelAcc = SimTK::Vec3(&xDDot[0]);
     auto lHeelAcc = SimTK::Vec3(&xDDot[3]);
     auto rToeAcc = SimTK::Vec3(&xDDot[6]);
     auto lToeAcc = SimTK::Vec3(&xDDot[9]);
 
-    // append to sliding windows
-    rSlidingWindow.insert(SimTK::Vec4(
-            (rToeAcc.norm() - parameters.acc_threshold > 0) ? 1 : 0,
-            (rHeelAcc.norm() - parameters.acc_threshold > 0) ? 1 : 0,
-            (rToeVel.norm() - parameters.vel_threshold > 0) ? 1 : 0,
-            (rHeelVel.norm() - parameters.vel_threshold > 0) ? 1 : 0));
-    lSlidingWindow.insert(SimTK::Vec4(
-            (lToeAcc.norm() - parameters.acc_threshold > 0) ? 1 : 0,
-            (lHeelAcc.norm() - parameters.acc_threshold > 0) ? 1 : 0,
-            (lToeVel.norm() - parameters.vel_threshold > 0) ? 1 : 0,
-            (lHeelVel.norm() - parameters.vel_threshold > 0) ? 1 : 0));
+    // TODO not very accurate
+    double rPhase = (rToeAcc.norm() < parameters.accThreshold) ? 1 : -1;
+    double lPhase = (lToeAcc.norm() < parameters.accThreshold) ? 1 : -1;
 
-    // if the window has consecutive values equal to Vec4(0), then legPhase =
-    // stance (posistive double). Else legPhase = swing (negative double)
-    double rPhase = (rSlidingWindow.equal(SimTK::Vec4(0))) ? 1 : -1;
-    double lPhase = (lSlidingWindow.equal(SimTK::Vec4(0))) ? 1 : -1;
-
-    if (!filtered.isValid) rPhase = lPhase = SimTK::NaN;
-
-    // std::cout << lToeAcc.norm() << " ";
-
+    std::cout <<    rToeAcc.norm() << std::endl;
     // update detector internal state
     updDetectorState(input.t, rPhase, lPhase);
 }

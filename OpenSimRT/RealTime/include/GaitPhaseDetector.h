@@ -11,15 +11,15 @@ namespace OpenSimRT {
 // Interface class for event detection algorithms and gait-cycle related state.
 class RealTime_API GaitPhaseDetector {
  public:
-    using DetectEventFunction =
-            std::function<bool(const SlidingWindow<GaitPhaseState::LegPhase>&)>;
+    template <typename T>
+    using DetectEventFunction = std::function<bool(const SlidingWindow<T>&)>;
 
     struct TimeConstant {
         double right = -1;
         double left = -1;
     };
 
-    GaitPhaseDetector();
+    GaitPhaseDetector(const int& windowSize);
     virtual ~GaitPhaseDetector() = default;
 
     bool isDetectorReady();
@@ -44,8 +44,10 @@ class RealTime_API GaitPhaseDetector {
     // update leg phase
     GaitPhaseState::LegPhase updLegPhase(const double&);
 
-    DetectEventFunction detectHS; // function to determine heel-strike
-    DetectEventFunction detectTO; // function to determine toe-off
+    // function to determine heel-strike
+    DetectEventFunction<GaitPhaseState::LegPhase> detectHS;
+    // function to determine toe-off
+    DetectEventFunction<GaitPhaseState::LegPhase> detectTO;
 
     GaitPhaseState::LeadingLeg leadingLeg;
     SlidingWindow<GaitPhaseState::LegPhase> phaseWindowR, phaseWindowL;
@@ -55,6 +57,7 @@ class RealTime_API GaitPhaseDetector {
     TimeConstant Ths, Tto;
     double Tds, Tss;
 
+    int _windowSize;
     // current gait phase
     GaitPhaseState::GaitPhase gaitPhase;
 };

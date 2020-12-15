@@ -1,19 +1,21 @@
 // Anterior GRF (f_x) sigmoid_with_bump parameters
-double B = 25.974456748001113;
-double M = 0.7520304912335662;
-double m1 = 0.4470939749685837;
-double m2 = 0.43955467948725574;
-double c = 0.03350169202846608;
+double A = 0.18213741709407785;
+double K = 1.5336555709791573;
+double B = 61.262083516698254;
+double M = -1.129871259921328;
+double m1 = 0.6775131464498075;
+double m2 = -0.5301203559455592;
+double c = 0.06552686919055911;
 
 
-// Vertical GRF (f_y) logistic parameters
-double A = 1.1193681826492452;
-double K = -1.6038212670613377;
-double C = 3.037706815056258;
-double B = 61.29534891423534;
-double Q = 0.5067639996015457;
-double m = 0.9396455521564754;
-double v = 0.42306183726767493;
+// Vertical GRF (f_y) sigmoid_with_bump parameters
+double A = 104.48129819014105;
+double K = 4.038761115241529;
+double B = 27.038524081542587;
+double M = -107.3218632558905;
+double m1 = 0.6878350988446074;
+double m2 = -0.4598754415541789;
+double c = 0.9165587085483512;
 
 
 // Lateral GRF (f_z) logistic parameters

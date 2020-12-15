@@ -8,11 +8,15 @@ namespace OpenSimRT {
 // Gait phase detector implementation based on forces between contact surfaces
 class RealTime_API ContactForceBasedPhaseDetector : public GaitPhaseDetector {
  public:
+    struct Parameters {
+        double threshold;
+        int windowSize;
+        SimTK::Vec3 plane_origin;
+    };
 
     // constructor
-    ContactForceBasedPhaseDetector(
-            const OpenSim::Model&,
-            const GRFMPrediction::Parameters& parameters);
+    ContactForceBasedPhaseDetector(const OpenSim::Model&,
+                                   const Parameters& parameters);
 
     void updDetector(const GRFMPrediction::Input& input);
 
@@ -23,6 +27,6 @@ class RealTime_API ContactForceBasedPhaseDetector : public GaitPhaseDetector {
 
     OpenSim::Model model;
     SimTK::State state;
-    GRFMPrediction::Parameters parameters;
+    Parameters parameters;
 };
 } // namespace OpenSimRT
