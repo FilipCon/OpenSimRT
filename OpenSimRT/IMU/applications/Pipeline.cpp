@@ -48,6 +48,7 @@ void run() {
     auto SEND_PORTS = ini.getVector(section, "IMU_SEND_PORTS", vector<int>());
     auto LISTEN_PORTS =
             ini.getVector(section, "IMU_LISTEN_PORTS", vector<int>());
+    auto INSOLE_LISTEN_IP = ini.getString(section, "INSOLE_LISTEN_IP", "");
     auto INSOLES_PORT = ini.getInteger(section, "INSOLE_LISTEN_PORT", 0);
     auto INSOLE_SIZE = ini.getInteger(section, "INSOLE_SIZE", 0);
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
@@ -83,7 +84,7 @@ void run() {
     InverseKinematics::createIMUTasksFromObservationOrder(
             model, imuObservationOrder, imuTasks);
 
-    // driver
+    // imu driver
     NGIMUInputDriver driver;
     driver.setupInput(imuObservationOrder,
                       vector<string>(LISTEN_PORTS.size(), LISTEN_IP),
@@ -93,7 +94,7 @@ void run() {
     auto imuLogger = driver.initializeLogger();
 
     // insole driver
-    MoticonReceiver mt(LISTEN_IP, INSOLES_PORT);
+    MoticonReceiver mt(INSOLE_LISTEN_IP, INSOLES_PORT);
     mt.setInsoleSize(INSOLE_SIZE);
     auto mtLogger = mt.initializeLogger();
 

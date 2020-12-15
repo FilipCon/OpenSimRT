@@ -25,11 +25,20 @@ class Moticon_API MoticonReceiver {
     void setInsoleSize(const int&);
 
  private:
+    std::string getDataFromStream();
+    std::vector<double> splitInputStream(std::string, std::string);
+    void startStream();
+
     UdpReceiveSocket* socket;
     IpEndpointName* endPoint;
-    std::string getStream();
-    std::vector<double> splitInputStream(std::string, std::string);
+
     double initFrameTime;
     MoticonInsoleSizes::Size size;
+    std::string dataStream;
+
+    std::thread streamThread;
+    std::mutex _mu;
+    std::condition_variable _cond;
+    bool newData = false;
 };
 } // namespace OpenSimRT

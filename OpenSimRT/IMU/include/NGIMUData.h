@@ -8,9 +8,15 @@
 #define PICOSECS_RESOLUTION_BIN 4294967295UL // pow(2, 32)
 #define PICOSECS_RESOLUTION_DEC 1000000000   // pow(10, 9)
 
-#define RFC_PROTOCOL                                                           \
-    2208988800UL // RFC protocol counting 70 years since Jan 1 1900, 00:00 GMT
-#define GMT_LOCAL_TIMEZONE 10800UL // Timezone in Greece is GMT+03:00
+#ifdef WIN32
+#    define RFC_PROTOCOL 0UL //
+
+#else // Unix time
+#    define RFC_PROTOCOL 2208988800UL //Jan 1 1900
+
+#endif
+// Timezone in Greece is GMT+03:00
+#define GMT_LOCAL_TIMEZONE 10800UL
 
 namespace OpenSimRT {
 
