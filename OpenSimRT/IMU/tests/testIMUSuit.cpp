@@ -18,6 +18,7 @@
 #include <SimTKcommon/internal/BigMatrix.h>
 #include <SimTKcommon/internal/State.h>
 #include <SimTKcommon/internal/negator.h>
+#include <Simulation/Model/Marker.h>
 #include <Simulation/Model/Model.h>
 #include <chrono>
 #include <cmath>

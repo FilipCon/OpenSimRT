@@ -52,6 +52,9 @@ void run() {
 
     // setup model
     Model model(modelFile);
+    OpenSimUtils::removeActuators(model);
+    model.finalizeConnections();
+    model.initSystem();
 
     // imu tasks
     vector<InverseKinematics::IMUTask> imuTasks;
@@ -79,7 +82,7 @@ void run() {
 
     // sensor data synchronization
     double samplingRate = 40;
-    double threshold = 0.0001;
+    double threshold = 1;
     SyncManager manager(samplingRate, threshold);
 
     // setup filters
@@ -112,6 +115,8 @@ void run() {
             manager.appendPack(imuDataAsPairs);
             auto pack = manager.getPack();
 
+            cout << manager.getTable().getNumRows() <<endl;
+
             if (pack.second.empty()) continue;
 
             // retrieve original representation of input data
@@ -122,18 +127,18 @@ void run() {
             // solve ik
             auto pose = ik.solve(clb.transform(imuData, {}));
 
-            // filter
-            auto ikFiltered = ikFilter.filter({pose.t, pose.q});
-            auto q = ikFiltered.x;
+            // // filter
+            // auto ikFiltered = ikFilter.filter({pose.t, pose.q});
+            // auto q = ikFiltered.x;
 
-            if (!ikFiltered.isValid) continue;
+            // if (!ikFiltered.isValid) continue;
 
             // visualize
             visualizer.update(pose.q);
 
-            // record
-            imuLogger.appendRow(pose.t, ~driver.asVector(imuDataFrame));
-            qLogger.appendRow(pose.t, ~pose.q);
+            // // record
+            // imuLogger.appendRow(pose.t, ~driver.asVector(imuDataFrame));
+            // qLogger.appendRow(pose.t, ~pose.q);
         }
     } catch (std::exception& e) {
         cout << e.what() << endl;

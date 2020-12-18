@@ -7,6 +7,7 @@
 #include <Common/TimeSeriesTable.h>
 #include <SimTKcommon.h>
 #include <SimTKcommon/internal/BigMatrix.h>
+#include <condition_variable>
 #include <map>
 #include <ostream>
 #include <string>
