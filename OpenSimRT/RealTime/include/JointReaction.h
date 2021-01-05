@@ -34,30 +34,25 @@ class RealTime_API JointReaction {
         SimTK::Vector_<SimTK::SpatialVec> reactionWrench; // [m, f]^T
     };
 
-    struct JointReactionKey {
-        const OpenSim::Joint* joint;
-        bool isAppliedOnChild = true; // /* TODO:  */
-        const OpenSim::Frame* appliedOnBody;
-        const OpenSim::Frame* expressedInFrame;
-    };
-
-    OpenSim::Model model;
-    SimTK::State state;
-    std::vector<ExternalWrench*> externalWrenches;
-
- public:
+ public: /* public interface */
     JointReaction(
             const OpenSim::Model& model,
             const std::vector<ExternalWrench::Parameters>& wrenchParameters);
     Output solve(const Input& input);
     SimTK::Vector asForceMomentPoint(const Output& jrOutput);
-
     /**
-     * Initialize joint reaction analysis log storage. Use this to create a
-     * TimeSeriesTable that can be appended with the computed joint reaction
-     * loads.
+     * Initialize inverse dynamics log storage. Use this to create a
+     * TimeSeriesTable that can be appended with the computed generalized
+     * forces.
      */
     OpenSim::TimeSeriesTable initializeLogger();
+
+ private: /* private data members */
+    OpenSim::Model model;
+    SimTK::State state;
+    std::vector<ExternalWrench*> externalWrenches;
 };
+
 } // namespace OpenSimRT
+
 #endif

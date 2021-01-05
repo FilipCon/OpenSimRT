@@ -2,11 +2,8 @@
 
 #include "Exception.h"
 #include "InverseDynamics.h"
-#include "OpenSimUtils.h"
 
 #include <OpenSim/Simulation/Model/Actuator.h>
-#include <OpenSim/Simulation/Model/BodySet.h>
-#include <OpenSim/Simulation/Model/JointSet.h>
 
 using namespace std;
 using namespace OpenSim;
@@ -63,11 +60,10 @@ JointReaction::Output JointReaction::solve(const JointReaction::Input& input) {
 
     // calculate all joint reaction forces and moments applied to child bodies,
     // expressed in ground frame
-    int nb = model.getNumBodies();
     Output output;
     output.t = input.t;
-    output.reactionWrench = Vector_<SpatialVec>(nb);
-    model.getMultibodySystem().realize(state, Stage::Acceleration);
+    output.reactionWrench = Vector_<SpatialVec>(model.getNumBodies());
+    model.realizeAcceleration(state);
     model.getMatterSubsystem().calcMobilizerReactionForces(
             state, output.reactionWrench);
 
@@ -80,7 +76,7 @@ JointReaction::asForceMomentPoint(const JointReaction::Output& jrOutput) {
     const auto& joints = model.getJointSet();
     const auto& ground = model.getGround();
 
-    Vector out(nj * 9);
+    Vector out(nj * 6);
     for (int i = 0; i < nj; ++i) {
         auto jointReaction =
                 joints[i].calcReactionOnChildExpressedInGround(state);
@@ -98,15 +94,15 @@ JointReaction::asForceMomentPoint(const JointReaction::Output& jrOutput) {
         Vec3 moment = ground.expressVectorInGround(state, jointReaction[0]);
 
         /* place results in the truncated loads vectors*/
-        out[i * 9 + 0] = force[0];
-        out[i * 9 + 1] = force[1];
-        out[i * 9 + 2] = force[2];
-        out[i * 9 + 3] = moment[0];
-        out[i * 9 + 4] = moment[1];
-        out[i * 9 + 5] = moment[2];
-        out[i * 9 + 6] = pointOfApplication[0];
-        out[i * 9 + 7] = pointOfApplication[1];
-        out[i * 9 + 8] = pointOfApplication[2];
+        out[i * 6 + 0] = force[0];
+        out[i * 6 + 1] = force[1];
+        out[i * 6 + 2] = force[2];
+        out[i * 6 + 3] = moment[0];
+        out[i * 6 + 4] = moment[1];
+        out[i * 6 + 5] = moment[2];
+        // out[i * 9 + 6] = pointOfApplication[0];
+        // out[i * 9 + 7] = pointOfApplication[1];
+        // out[i * 9 + 8] = pointOfApplication[2];
     }
     return out;
 }
@@ -124,9 +120,9 @@ TimeSeriesTable JointReaction::initializeLogger() {
         columnNames.push_back(label + "_mx");
         columnNames.push_back(label + "_my");
         columnNames.push_back(label + "_mz");
-        columnNames.push_back(label + "_px");
-        columnNames.push_back(label + "_py");
-        columnNames.push_back(label + "_pz");
+        // columnNames.push_back(label + "_px");
+        // columnNames.push_back(label + "_py");
+        // columnNames.push_back(label + "_pz");
     }
 
     TimeSeriesTable table;
