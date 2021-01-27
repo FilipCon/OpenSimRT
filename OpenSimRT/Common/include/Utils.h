@@ -125,4 +125,11 @@ template <typename T> struct SlidingWindow {
                int(data.size());
     }
 };
+
+// Compute the projection of a point or vector on a arbitrary plane.
+static SimTK::Vec3 projectionOnPlane(const SimTK::Vec3& point, const SimTK::Vec3& planeOrigin,
+                              const SimTK::Vec3& planeNormal) {
+    return point - SimTK::dot(point - planeOrigin, planeNormal) * planeNormal;
+}
+
 #endif

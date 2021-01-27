@@ -10,12 +10,86 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.offsetbox import AnchoredText
 
+def mat_to_list(mat):
+    """Converts an Simbody Matrix to a Python double list.
+    """
+    temp = []
+    for i in range(mat.nrow()):
+        row = []
+        for j in range(mat.ncol()):
+            row.append(mat.get(i, j))
+
+        temp.append(row)
+
+    return temp
+
+
+def vec_to_list(vec):
+    """Converts an OpenSim Vec3/6 to a Python list.
+    """
+    temp = []
+    for i in range(vec.size()):
+        temp.append(vec.get(i))
+
+    return temp
+
+
+def calculate_absolute_body_transformations(model, state):
+    """Calculates the orientation and location of the model bodies with respect
+    to the ground frame for the current state.
+
+    Parameters
+    ----------
+    model: OpenSim.Model
+    state: OpenSim.State
+
+    Returns
+    -------
+    body_transformations: dictionary
+
+    """
+    body_transformations = {}
+    for body in model.getBodySet():
+        frame = opensim.Frame.safeDownCast(body)
+        X_BG = frame.getTransformInGround(state)
+
+        body_transformations[body.getName()] = {
+            "location": vec_to_list(X_BG.p()),
+            "orientation": mat_to_list(X_BG.R()),
+        }
+
+    return body_transformations
+
+
+def get_model_coordinates(model):
+    model_coordinates = []
+    for i, coordinate in enumerate(model.getCoordinateSet()):
+        model_coordinates.append(coordinate.getName())
+
+    return model_coordinates
+
+
+def get_model_coordinates_in_multibody_order(model):
+    model_coordinates = {}
+
+    for i, coordinate in enumerate(model.getCoordinateSet()):
+        mbix = coordinate.getBodyIndex()
+        mqix = coordinate.getMobilizerQIndex()
+        model_coordinates[coordinate.getName()] = (mbix, mqix)
+        model_coordinates = dict(
+            sorted(model_coordinates.items(), key=lambda x: x[1]))
+
+    for i, (key, value) in enumerate(model_coordinates.items()):
+        model_coordinates[key] = i
+
+    return model_coordinates
 
 def annotate_plot(ax, text):
     """Annotate a figure by adding a text.
     """
     at = AnchoredText(text, frameon=True, loc='upper left')
     at.patch.set_boxstyle('round, pad=0, rounding_size=0.2')
+    at.patch.set_alpha(0.5)
     ax.add_artist(at)
 
 
@@ -30,7 +104,7 @@ def rmse_metric(s1, s2):
 
     # if s2.index[0] < 0:
     #     s2.index = s2.index - s2.index[0]
-        
+
     t1_0 = s1.index[0]
     t1_f = s1.index[-1]
     t2_0 = s2.index[0]
@@ -42,6 +116,11 @@ def rmse_metric(s1, s2):
     return np.round(np.sqrt(np.mean((x - y) ** 2)), 3)
 
 
+def to_gait_cycle(data_frame, t0, tf):
+    temp = data_frame[(data_frame.time >= t0) & (data_frame.time <= tf)].copy()
+    temp.time = data_frame['time'].transform(lambda x: 100.0 / (tf - t0) * (x - t0))
+    return temp
+
 def osim_array_to_list(array):
     """Convert OpenSim::Array<T> to Python list.
     """
@@ -52,7 +131,7 @@ def osim_array_to_list(array):
     return temp
 
 
-def read_from_storage(file_name, to_filter=False):
+def read_from_storage(file_name, resample=False, to_filter=False):
     """Read OpenSim.Storage files.
 
     Parameters
@@ -64,7 +143,8 @@ def read_from_storage(file_name, to_filter=False):
     tuple: (labels, time, data)
     """
     sto = opensim.Storage(file_name)
-    sto.resampleLinear(0.01)
+    if resample:
+        sto.resampleLinear(0.01)
     if to_filter:
         sto.lowpassFIR(4, 6)
 
@@ -101,11 +181,13 @@ def index_containing_substring(list_str, pattern):
          the indices where the pattern matches
 
     """
-    return [i for i, item in enumerate(list_str)
-            if re.search(pattern, item)]
+    return [i for i, item in enumerate(list_str) if re.search(pattern, item)]
 
 
-def plot_sto_file(file_name, plot_file, plots_per_row=4, pattern=None,
+def plot_sto_file(file_name,
+                  plot_file,
+                  plots_per_row=4,
+                  pattern=None,
                   title_function=lambda x: x):
     """Plots the .sto file (OpenSim) by constructing a grid of subplots.
 
@@ -140,11 +222,10 @@ def plot_sto_file(file_name, plot_file, plots_per_row=4, pattern=None,
 
     with PdfPages(plot_file) as pdf:
         for page in range(0, pages):
-            fig, ax = plt.subplots(nrows=ncols, ncols=ncols,
-                                   figsize=(8, 8))
+            fig, ax = plt.subplots(nrows=ncols, ncols=ncols, figsize=(8, 8))
             ax = ax.flatten()
-            for pl, col in enumerate(indices[page * ncols ** 2:page *
-                                             ncols ** 2 + ncols ** 2]):
+            for pl, col in enumerate(indices[page * ncols**2:page * ncols**2 +
+                                             ncols**2]):
                 ax[pl].plot(data[:, 0], data[:, col])
                 ax[pl].set_title(title_function(labels[col]))
 
@@ -196,7 +277,7 @@ def subject_specific_isometric_force(generic_model_file, subject_model_file,
     model_generic = opensim.Model(generic_model_file)
     state_generic = model_generic.initSystem()
     mass_generic = model_generic.getTotalMass(state_generic)
-    
+
     model_subject = opensim.Model(subject_model_file)
     state_subject = model_subject.initSystem()
     mass_subject = model_subject.getTotalMass(state_subject)
@@ -212,11 +293,9 @@ def subject_specific_isometric_force(generic_model_file, subject_model_file,
         l0_generic = muscle_generic.getOptimalFiberLength()
         l0_subject = muscle_subject.getOptimalFiberLength()
 
-        force_scale_factor = (V_total_subject / V_total_generic) / (l0_subject /
-                                                                    l0_generic)
-        muscle_subject.setMaxIsometricForce(force_scale_factor *
-                                            muscle_subject.getMaxIsometricForce())
+        force_scale_factor = (V_total_subject /
+                              V_total_generic) / (l0_subject / l0_generic)
+        muscle_subject.setMaxIsometricForce(
+            force_scale_factor * muscle_subject.getMaxIsometricForce())
 
     model_subject.printToXML(subject_model_file)
-
-

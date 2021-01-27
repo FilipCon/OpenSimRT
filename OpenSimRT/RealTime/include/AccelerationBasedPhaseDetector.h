@@ -15,16 +15,17 @@ namespace OpenSimRT {
 class RealTime_API AccelerationBasedPhaseDetector : public GaitPhaseDetector {
  public:
     struct Parameters {
-        double accThreshold;
-        double velThreshold;
+        double heelAccThreshold; //
+        double toeAccThreshold; //
 
         int windowSize;
+        int consecutiveValues;
 
         std::string rFootBodyName;
         std::string lFootBodyName;
         SimTK::Vec3 rHeelLocationInFoot;
-        SimTK::Vec3 rToeLocationInFoot;
         SimTK::Vec3 lHeelLocationInFoot;
+        SimTK::Vec3 rToeLocationInFoot;
         SimTK::Vec3 lToeLocationInFoot;
 
         double samplingFrequency;
@@ -47,6 +48,9 @@ class RealTime_API AccelerationBasedPhaseDetector : public GaitPhaseDetector {
     OpenSim::Model model;
     SimTK::State state;
     Parameters parameters;
+
+    SlidingWindow<SimTK::Vec2> rSlidingWindow;
+    SlidingWindow<SimTK::Vec2> lSlidingWindow;
 
     SimTK::ReferencePtr<ButterworthFilter> posFilter;
     SimTK::ReferencePtr<ButterworthFilter> velFilter;

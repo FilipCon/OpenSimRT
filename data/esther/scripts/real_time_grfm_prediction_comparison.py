@@ -70,6 +70,7 @@ def plotXYZ(gt_data_frame, est_data_frame, id_gt, id_est, hs_events, to_events, 
                           linestyle='--', linewidth=0.5)
     fig.tight_layout()
     pdf.savefig(fig)
+    plt.plot()
     plt.close()
 
 

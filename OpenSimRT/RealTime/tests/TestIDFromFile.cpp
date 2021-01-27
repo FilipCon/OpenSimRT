@@ -118,12 +118,12 @@ void run() {
     InverseDynamics id(model, wrenchParameters);
     auto tauLogger = id.initializeLogger();
 
-    // visualizer
-    BasicModelVisualizer visualizer(model);
-    auto rightGRFDecorator = new ForceDecorator(Green, 0.001, 3);
-    visualizer.addDecorationGenerator(rightGRFDecorator);
-    auto leftGRFDecorator = new ForceDecorator(Green, 0.001, 3);
-    visualizer.addDecorationGenerator(leftGRFDecorator);
+    // // visualizer
+    // BasicModelVisualizer visualizer(model);
+    // auto rightGRFDecorator = new ForceDecorator(Green, 0.001, 3);
+    // visualizer.addDecorationGenerator(rightGRFDecorator);
+    // auto leftGRFDecorator = new ForceDecorator(Green, 0.001, 3);
+    // visualizer.addDecorationGenerator(leftGRFDecorator);
 
     // mean delay
     int sumDelayMS = 0;
@@ -171,10 +171,10 @@ void run() {
         sumDelayMS +=
                 chrono::duration_cast<chrono::milliseconds>(t2 - t1).count();
 
-        // visualization
-        visualizer.update(q);
-        rightGRFDecorator->update(grfRightWrench.point, grfRightWrench.force);
-        leftGRFDecorator->update(grfLeftWrench.point, grfLeftWrench.force);
+        // // visualization
+        // visualizer.update(q);
+        // rightGRFDecorator->update(grfRightWrench.point, grfRightWrench.force);
+        // leftGRFDecorator->update(grfLeftWrench.point, grfLeftWrench.force);
 
         // log data (use filter time to align with delay)
         tauLogger.appendRow(ikFiltered.t, ~idOutput.tau);

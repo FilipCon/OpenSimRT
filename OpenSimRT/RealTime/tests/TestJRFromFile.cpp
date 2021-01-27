@@ -123,10 +123,10 @@ void run() {
     JointReaction jr(model, wrenchParameters);
     auto jrLogger = jr.initializeLogger();
 
-    // visualizer
-    BasicModelVisualizer visualizer(model);
-    auto rightKneeForceDecorator = new ForceDecorator(Red, 0.0005, 3);
-    visualizer.addDecorationGenerator(rightKneeForceDecorator);
+    // // visualizer
+    // BasicModelVisualizer visualizer(model);
+    // auto rightKneeForceDecorator = new ForceDecorator(Red, 0.0005, 3);
+    // visualizer.addDecorationGenerator(rightKneeForceDecorator);
 
     // mean delay
     int sumDelayMS = 0;
@@ -180,12 +180,12 @@ void run() {
         sumDelayMS +=
                 chrono::duration_cast<chrono::milliseconds>(t2 - t1).count();
 
-        // visualization
-        visualizer.update(q);
-        auto kneeForce = -jrOutput.reactionWrench[2](1);
-        Vec3 kneeJoint;
-        visualizer.expressPositionInGround("tibia_r", Vec3(0), kneeJoint);
-        rightKneeForceDecorator->update(kneeJoint, kneeForce);
+        // // visualization
+        // visualizer.update(q);
+        // auto kneeForce = -jrOutput.reactionWrench[2](1);
+        // Vec3 kneeJoint;
+        // visualizer.expressPositionInGround("tibia_r", Vec3(0), kneeJoint);
+        // rightKneeForceDecorator->update(kneeJoint, kneeForce);
 
         // log data (use filter time to align with delay)
         jrLogger.appendRow(ikFiltered.t, ~jr.asForceMomentPoint(jrOutput));

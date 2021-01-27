@@ -1,0 +1,20 @@
+// Anterior CoP Displacement sigmoid_with_bump parameters
+double A = 0.5872862163764623;
+double K = -0.9639008247165223;
+double B = 8.591457650127703;
+double M = 0.11848066435523598;
+double m1 = 0.12886364394528893;
+double m2 = 0.3833280092673096;
+double c = 0.06600088500551564;
+
+
+// Lateral CoP Displacement sigmoid_with_bump parameters
+double A = -0.09874406432271028;
+double K = 0.3506452924579077;
+double B = 8.772770508730263;
+double M = 2.5367825022786645;
+double m1 = -0.2594157146605231;
+double m2 = 1.0851199557299824;
+double c = -0.013489510601430348;
+
+

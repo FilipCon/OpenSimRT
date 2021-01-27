@@ -187,13 +187,13 @@ def subject_specific_isometric_force(generic_model_file, subject_model_file,
 
     scale_factor = (V_total_subject / V_total_generic) / (l0_subject / l0_generic)
 
+    model_generic = opensim.Model(generic_model_file)
     F_max_i = scale_factor * F_max_i
 
     [1] http://dx.doi.org/10.1016/j.jbiomech.2013.12.002
     [2] http://dx.doi.org/10.1109/TBME.2016.2586891
 
     """
-    model_generic = opensim.Model(generic_model_file)
     state_generic = model_generic.initSystem()
     mass_generic = model_generic.getTotalMass(state_generic)
 

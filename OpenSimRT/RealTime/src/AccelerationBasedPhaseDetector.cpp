@@ -1,7 +1,6 @@
 #include "AccelerationBasedPhaseDetector.h"
 
 #include "GRFMPrediction.h"
-#include "SignalProcessing.h"
 
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/BigMatrix.h>
@@ -13,6 +12,11 @@ AccelerationBasedPhaseDetector::AccelerationBasedPhaseDetector(
         const OpenSim::Model& otherModel, const Parameters& otherParameters)
         : GaitPhaseDetector(otherParameters.windowSize),
           model(*otherModel.clone()), parameters(otherParameters) {
+    rSlidingWindow.init(SimTK::Array_<SimTK::Vec2>(
+            parameters.consecutiveValues, SimTK::Vec2(0.0)));
+    lSlidingWindow.init(SimTK::Array_<SimTK::Vec2>(
+            parameters.consecutiveValues, SimTK::Vec2(0.0)));
+
     posFilter = new ButterworthFilter(12, parameters.posLPFilterOrder,
                                       (2 * parameters.posLPFilterFreq) /
                                               parameters.samplingFrequency,
@@ -63,8 +67,8 @@ void AccelerationBasedPhaseDetector::updDetector(
 
     // get station position
     auto rHeelPos = heelStationR->getLocationInGround(state);
-    auto lHeelPos = heelStationL->getLocationInGround(state);
     auto rToePos = toeStationR->getLocationInGround(state);
+    auto lHeelPos = heelStationL->getLocationInGround(state);
     auto lToePos = toeStationL->getLocationInGround(state);
 
     // prepare for filtering
@@ -74,22 +78,32 @@ void AccelerationBasedPhaseDetector::updDetector(
     v(6, 3) = SimTK::Vector(rToePos);
     v(9, 3) = SimTK::Vector(lToePos);
 
-    // filter and differentiation
+    // filter position
     auto x = posFilter->filter(v);
     auto xDot = velFilter->filter(posDiff->diff(input.t, x));
     auto xDDot = accFilter->filter(velDiff->diff(input.t, xDot));
 
-    // get station and accelerations
+    // get station accelerations
     auto rHeelAcc = SimTK::Vec3(&xDDot[0]);
     auto lHeelAcc = SimTK::Vec3(&xDDot[3]);
     auto rToeAcc = SimTK::Vec3(&xDDot[6]);
     auto lToeAcc = SimTK::Vec3(&xDDot[9]);
 
-    // TODO not very accurate
-    double rPhase = (rToeAcc.norm() < parameters.accThreshold) ? 1 : -1;
-    double lPhase = (lToeAcc.norm() < parameters.accThreshold) ? 1 : -1;
+    // append to sliding windows
+    rSlidingWindow.insert(SimTK::Vec2(
+            (rToeAcc.norm() - parameters.toeAccThreshold > 0) ? 1 : 0,
+            (rHeelAcc.norm() - parameters.heelAccThreshold > 0) ? 1 : 0));
+    lSlidingWindow.insert(SimTK::Vec2(
+            (lToeAcc.norm() - parameters.toeAccThreshold > 0) ? 1 : 0,
+            (lHeelAcc.norm() - parameters.heelAccThreshold > 0) ? 1 : 0));
 
-    std::cout <<    rToeAcc.norm() << std::endl;
+    double rPhase = (rSlidingWindow.equal(SimTK::Vec2(1,1))) ? -1 : 1;
+    double lPhase = (lSlidingWindow.equal(SimTK::Vec2(1,1))) ? -1 : 1;
+
+    // std::cout <<  rToeAcc.norm() << " "<< rHeelAcc.norm() << " "
+    //           <<  lToeAcc.norm() << " "<< lHeelAcc.norm() << " "
+    //           << std::endl;
+
     // update detector internal state
     updDetectorState(input.t, rPhase, lPhase);
 }

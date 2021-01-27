@@ -34,7 +34,6 @@
 #include <optional>
 #include <simbody/internal/Visualizer.h>
 #include <stdexcept>
-#include <thread>
 
 using namespace std;
 using namespace OpenSim;
@@ -43,7 +42,7 @@ using namespace SimTK;
 
 void run() {
     INIReader ini(INI_FILE);
-    auto section = "LOWER_BODY_NGIMU_OFFLINE";
+    auto section = "TEST_GRFM_PREDICTION_FROM_FILE";
     auto IMU_BODIES = ini.getVector(section, "IMU_BODIES", vector<string>());
     auto imuDirectionAxis = ini.getString(section, "IMU_DIRECTION_AXIS", "");
     auto imuBaseBody = ini.getString(section, "IMU_BASE_BODY", "");
@@ -55,6 +54,45 @@ void run() {
     auto cutoffFreq = ini.getReal(section, "CUTOFF_FREQ", 0);
     auto delay = ini.getInteger(section, "DELAY", 0);
     auto splineOrder = ini.getInteger(section, "SPLINE_ORDER", 0);
+
+    // acceleration-based detector parameters
+    auto heelAccThreshold = ini.getReal(section, "HEEL_ACC_THRESHOLD", 0);
+    auto toeAccThreshold = ini.getReal(section, "TOE_ACC_THRESHOLD", 0);
+    auto consecutiveValues = ini.getReal(section, "CONSECUTIVE_VALUES", 0);
+    auto windowSize = ini.getInteger(section, "WINDOW_SIZE", 0);
+    auto rFootBodyName = ini.getString(section, "RIGHT_FOOT_BODY_NAME", "");
+    auto lFootBodyName = ini.getString(section, "LEFT_FOOT_BODY_NAME", "");
+    auto rHeelLocation =
+            ini.getSimtkVec(section, "RIGHT_HEEL_LOCATION_IN_FOOT", Vec3(0));
+    auto lHeelLocation =
+            ini.getSimtkVec(section, "LEFT_HEEL_LOCATION_IN_FOOT", Vec3(0));
+    auto rToeLocation =
+            ini.getSimtkVec(section, "RIGHT_TOE_LOCATION_IN_FOOT", Vec3(0));
+    auto lToeLocation =
+            ini.getSimtkVec(section, "LEFT_TOE_LOCATION_IN_FOOT", Vec3(0));
+    auto samplingFrequency = ini.getInteger(section, "SAMPLING_FREQUENCY", 0);
+    auto accLPFilterFreq = ini.getInteger(section, "ACC_LP_FILTER_FREQ", 0);
+    auto velLPFilterFreq = ini.getInteger(section, "VEL_LP_FILTER_FREQ", 0);
+    auto posLPFilterFreq = ini.getInteger(section, "POS_LP_FILTER_FREQ", 0);
+    auto accLPFilterOrder = ini.getInteger(section, "ACC_LP_FILTER_ORDER", 0);
+    auto velLPFilterOrder = ini.getInteger(section, "VEL_LP_FILTER_ORDER", 0);
+    auto posLPFilterOrder = ini.getInteger(section, "POS_LP_FILTER_ORDER", 0);
+    auto posDiffOrder = ini.getInteger(section, "POS_DIFF_ORDER", 0);
+    auto velDiffOrder = ini.getInteger(section, "VEL_DIFF_ORDER", 0);
+
+    // grfm parameters
+    auto grfmMethod = ini.getString(section, "METHOD", "");
+    auto pelvisBodyName = ini.getString(section, "PELVIS_BODY_NAME", "");
+    auto rHeelCoPLocation =
+            ini.getSimtkVec(section, "RIGHT_HEEL_STATION_LOCATION", Vec3(0));
+    auto lHeelCoPLocation =
+            ini.getSimtkVec(section, "LEFT_HEEL_STATION_LOCATION", Vec3(0));
+    auto rToeCoPLocation =
+            ini.getSimtkVec(section, "RIGHT_TOE_STATION_LOCATION", Vec3(0));
+    auto lToeCoPLocation =
+            ini.getSimtkVec(section, "LEFT_TOE_STATION_LOCATION", Vec3(0));
+    auto directionWindowSize =
+            ini.getInteger(section, "DIRECTION_WINDOW_SIZE", 0);
 
     auto subjectDir = DATA_DIR + ini.getString(section, "SUBJECT_DIR", "");
     auto modelFile = subjectDir + ini.getString(section, "MODEL_FILE", "");
@@ -106,35 +144,36 @@ void run() {
     SyncManager manager(samplingRate, threshold);
 
     AccelerationBasedPhaseDetector::Parameters parameters;
-    parameters.accThreshold = 7;
-    parameters.velThreshold = 1.9;
-    parameters.windowSize = 7;
-    parameters.rFootBodyName = "calcn_r";
-    parameters.lFootBodyName = "calcn_l";
-    parameters.rHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, -0.0055);
-    parameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
-    parameters.lHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, 0.0055);
-    parameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
-    parameters.samplingFrequency = 60;
-    parameters.accLPFilterFreq = 5;
-    parameters.velLPFilterFreq = 5;
-    parameters.posLPFilterFreq = 5;
-    parameters.accLPFilterOrder = 1;
-    parameters.velLPFilterOrder = 1;
-    parameters.posLPFilterOrder = 1;
-    parameters.posDiffOrder = 2;
-    parameters.velDiffOrder = 2;
+    parameters.heelAccThreshold = heelAccThreshold;
+    parameters.toeAccThreshold = toeAccThreshold;
+    parameters.windowSize = windowSize;
+    parameters.consecutiveValues = consecutiveValues;
+    parameters.rFootBodyName = rFootBodyName;
+    parameters.lFootBodyName = lFootBodyName;
+    parameters.rHeelLocationInFoot = rHeelLocation;
+    parameters.lHeelLocationInFoot = lHeelLocation;
+    parameters.rToeLocationInFoot = rToeLocation;
+    parameters.lToeLocationInFoot = lToeLocation;
+    parameters.samplingFrequency = samplingFrequency;
+    parameters.accLPFilterFreq = accLPFilterFreq;
+    parameters.velLPFilterFreq = velLPFilterFreq;
+    parameters.posLPFilterFreq = posLPFilterFreq;
+    parameters.accLPFilterOrder = accLPFilterOrder;
+    parameters.velLPFilterOrder = velLPFilterOrder;
+    parameters.posLPFilterOrder = posLPFilterOrder;
+    parameters.posDiffOrder = posDiffOrder;
+    parameters.velDiffOrder = velDiffOrder;
     AccelerationBasedPhaseDetector detector(model, parameters);
     GRFMPrediction::Parameters grfmParameters;
-    grfmParameters.method = "Newton-Euler";
-    grfmParameters.pelvisBodyName = "pelvis";
-    grfmParameters.rStationBodyName = "calcn_r";
-    grfmParameters.lStationBodyName = "calcn_l";
-    grfmParameters.rHeelStationLocation = SimTK::Vec3(0.014, -0.0168, -0.0055);
-    grfmParameters.lHeelStationLocation = SimTK::Vec3(0.014, -0.0168, 0.0055);
-    grfmParameters.rToeStationLocation = SimTK::Vec3(0.24, -0.0168, -0.00117);
-    grfmParameters.lToeStationLocation = SimTK::Vec3(0.24, -0.0168, 0.00117);
-    grfmParameters.directionWindowSize = 10;
+    grfmParameters.method = grfmMethod;
+    grfmParameters.pelvisBodyName = pelvisBodyName;
+    grfmParameters.rStationBodyName = rFootBodyName;
+    grfmParameters.lStationBodyName = lFootBodyName;
+    grfmParameters.rHeelStationLocation = rHeelCoPLocation;
+    grfmParameters.lHeelStationLocation = lHeelCoPLocation;
+    grfmParameters.rToeStationLocation = rToeCoPLocation;
+    grfmParameters.lToeStationLocation = lToeCoPLocation;
+    grfmParameters.directionWindowSize = directionWindowSize;
     GRFMPrediction grfmPrediction(model, grfmParameters, &detector);
     auto grfRightLogger = ExternalWrench::initializeLogger();
     auto grfLeftLogger = ExternalWrench::initializeLogger();

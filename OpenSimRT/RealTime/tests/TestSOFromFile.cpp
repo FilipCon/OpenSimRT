@@ -77,8 +77,8 @@ void run() {
     auto amLogger = so.initializeMuscleLogger();
     // auto tauResLogger = so.initializeResidualLogger();
 
-    // visualizer
-    BasicModelVisualizer visualizer(model);
+    // // visualizer
+    // BasicModelVisualizer visualizer(model);
 
     // mean delay
     int sumDelayMS = 0;
@@ -101,8 +101,8 @@ void run() {
         sumDelayMS +=
                 chrono::duration_cast<chrono::milliseconds>(t2 - t1).count();
 
-        // visualization
-        visualizer.update(q, soOutput.am);
+        // // visualization
+        // visualizer.update(q, soOutput.am);
 
         // log data (use filter time to align with delay)
         fmLogger.appendRow(t, ~soOutput.fm);

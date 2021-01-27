@@ -6,15 +6,15 @@
 #include <SimTKcommon/Scalar.h>
 #include <SimTKcommon/SmallMatrix.h>
 #include <SimTKcommon/internal/Rotation.h>
-#include <SimTKcommon/internal/UnitVec.h>
-#include <initializer_list>
 #include <stdexcept>
 
 namespace OpenSimRT {
 
 class RealTime_API GaitPhaseDetector;
 
-// helper function for updating opensim state
+/**
+ * Helper function for updating OpenSim state.
+ */
 template <typename T>
 void updateState(const T& input, const OpenSim::Model& model,
                  SimTK::State& state, const SimTK::Stage& stage) {
@@ -28,7 +28,9 @@ void updateState(const T& input, const OpenSim::Model& model,
     model.getMultibodySystem().realize(state, stage);
 }
 
-// basic sliding window implementation
+/**
+ * Basic Sliding Window implementation
+ */
 template <typename T> struct SlidingWindow {
     SimTK::Array_<T> data; // sliding window data
     std::size_t capacity;  // sliding window size
@@ -57,6 +59,7 @@ template <typename T> struct SlidingWindow {
                          int(data.size()));
     }
 
+    // Determine if all elements in the window are equal to input value
     bool equal(const T& x) {
         for (const auto& e : data) {
             if (e != x) return false;
@@ -64,6 +67,7 @@ template <typename T> struct SlidingWindow {
         return true;
     }
 
+    // Determine if the n first elements are equal to input value
     bool nFirstEqual(const T& x, const size_t& n) const {
         if (n > data.size()) throw std::runtime_error("Wrong input size");
         for (size_t i = 0; i < n; ++i) {
@@ -71,6 +75,8 @@ template <typename T> struct SlidingWindow {
         }
         return true;
     }
+
+    // Determine if the last n elements are equal to input value
     bool nLastEqual(const T& x, const size_t& n) const {
         if (n > data.size()) throw std::runtime_error("Wrong input size");
         for (size_t i = 0; i < n; ++i) {
@@ -91,20 +97,28 @@ class RealTime_API GaitPhaseState {
     enum class LeadingLeg { INVALID, RIGHT, LEFT };
 };
 
-// Ground Reaction Force & Moment Prediction Module
+/**
+ *  Ground Reaction Force & Moment Prediction Module
+ */
 class RealTime_API GRFMPrediction {
+    /**
+     * Equations that describe the Smooth Transition Assumption.
+     */
     typedef std::function<double(const double&)> TransitionFuction;
-    typedef std::function<SimTK::Vec3(const double&, const SimTK::Vec3&)>
-            CoPTrajectory;
+
+    /**
+     * Function that describe the CoP trajectory during gait.
+     */
+    typedef std::function<SimTK::Vec3(const double&, const SimTK::Vec3&)> CoPTrajectory;
 
  public:
     struct Parameters {
         int directionWindowSize;
-        std::string method; // Newton-Euler, ID
-        std::string pelvisBodyName;
-        std::string rStationBodyName, lStationBodyName;
-        SimTK::Vec3 rHeelStationLocation, lHeelStationLocation;
-        SimTK::Vec3 rToeStationLocation, lToeStationLocation;
+        std::string method;                             // Newton-Euler, ID
+        std::string pelvisBodyName;                     // pelvis body name
+        std::string rStationBodyName, lStationBodyName; // foot body Names
+        SimTK::Vec3 rHeelStationLocation, lHeelStationLocation; // begin of cop
+        SimTK::Vec3 rToeStationLocation, lToeStationLocation;   // end of cop
     };
     struct Input {
         double t;
@@ -131,17 +145,18 @@ class RealTime_API GRFMPrediction {
 
  private:
     // transition functions based on the STA
-    TransitionFuction anteriorForceTransition;
     TransitionFuction reactionComponentTransition;
+    // TransitionFuction anteriorForceTransition;
 
     // function that describes the CoP trajectory during gait
     CoPTrajectory copPosition;
 
-    SimTK::Vec3 totalReactionAtThs;
+    SimTK::Vec3 totalForceAtThs;
+    SimTK::Vec3 totalMomentAtThs;
     double t, Tds, Tss; // current simulation time, double support and single
                         // support period
 
-    // gait direction based on the average pelvis of the pelvis local frame
+    // gait direction based on the average direction of the pelvis anterior axis
     SlidingWindow<SimTK::Vec3> gaitDirectionBuffer;
 
     OpenSim::Model model;
@@ -158,21 +173,35 @@ class RealTime_API GRFMPrediction {
     SimTK::ReferencePtr<OpenSim::Station> toeStationR;
     SimTK::ReferencePtr<OpenSim::Station> toeStationL;
 
+    /**
+     * Compute the average heading direction during gait based on the anterior
+     * axis of the pelvis local frame.
+     */
     SimTK::Rotation computeGaitDirectionRotation(const std::string& bodyName);
+
+    /**
+     * Compute the total reaction components F_ext and M_ext based either on the
+     * Newton-Euler method or the by solving ID.
+     */
     void computeTotalReactionComponents(const Input& input,
                                         SimTK::Vec3& totalReactionForce,
                                         SimTK::Vec3& totalReactionMoment);
 
-    // separate total reaction into R/L foot reaction components
+    /**
+     * Separate the total reaction components into R/L foot reaction components.
+     */
     void seperateReactionComponents(
-            const SimTK::Vec3& totalReactionComponent,
+            const double& time, const SimTK::Vec3& totalReactionComponent,
+            const SimTK::Vec3& totalReactionAtThs,
             const TransitionFuction& anteriorComponentFunction,
             const TransitionFuction& verticalComponentFunction,
             const TransitionFuction& lateralComponentFunction,
             SimTK::Vec3& rightReactionComponent,
             SimTK::Vec3& leftReactionComponent);
 
-    // compute the CoP on each foot
+    /**
+     * Compute the CoP on each foot.
+     */
     void computeReactionPoint(SimTK::Vec3& rightPoint, SimTK::Vec3& leftPoint);
 };
 } // namespace OpenSimRT

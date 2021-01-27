@@ -8,23 +8,41 @@
 
 namespace OpenSimRT {
 
-// Interface class for event detection algorithms and gait-cycle related state.
+/**
+ *  Interface class for event detection algorithms and gait-cycle related state.
+ */
 class RealTime_API GaitPhaseDetector {
  public:
-    template <typename T>
-    using DetectEventFunction = std::function<bool(const SlidingWindow<T>&)>;
-
+    /**
+     * Compute events separately for each leg.
+     */
     struct TimeConstant {
         double right = -1;
         double left = -1;
     };
 
+    /**
+     * Type that describes the methods for detecting events in a Sliding Window.
+     */
+    template <typename T>
+    using DetectEventFunction = std::function<bool(const SlidingWindow<T>&)>;
+
     GaitPhaseDetector(const int& windowSize);
     virtual ~GaitPhaseDetector() = default;
 
+    /**
+     * Determine if the detector is ready when all internal state is valid.
+     */
     bool isDetectorReady();
+
+    //
+    // setters and getters
+    //
     GaitPhaseState::GaitPhase getPhase() { return gaitPhase; };
     const GaitPhaseState::LeadingLeg getLeadingLeg() { return leadingLeg; };
+
+    // always return the most recent event
+    //
     const double getHeelStrikeTime() {
         return (Ths.right > Ths.left) ? Ths.right : Ths.left;
     };
@@ -35,7 +53,13 @@ class RealTime_API GaitPhaseDetector {
     const double getSingleSupportDuration() { return Tss; };
 
  protected:
-    void updDetectorState(const double&, const double&, const double&);
+    /**
+     * Update the detector state by passing values that determine each leg
+     * phase. Positive values correspond to the STANCE phase and negative values
+     * to the SWING phase.
+     */
+    void updDetectorState(const double& t, const double& rValue,
+                          const double& lValue);
 
     // update gait phase based on leg phase
     GaitPhaseState::GaitPhase updGaitPhase(const GaitPhaseState::LegPhase&,
@@ -55,7 +79,7 @@ class RealTime_API GaitPhaseDetector {
     // time constants. DS and SS time-period, and exact time of HS and TO
     // events
     TimeConstant Ths, Tto;
-    double Tds, Tss;
+    double Tds, Tss, Tstance, Tswing;
 
     int _windowSize;
     // current gait phase

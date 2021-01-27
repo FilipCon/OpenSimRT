@@ -5,6 +5,8 @@
 //
 // http://code.google.com/p/inih/
 
+#include <SimTKcommon/SmallMatrix.h>
+#include <SimTKcommon/internal/Vec.h>
 #include <regex>
 #include <stdexcept>
 
@@ -45,6 +47,37 @@ public:
     // "on", "1", and valid false values are "false", "no", "off", "0" (not case
     // sensitive).
     bool getBoolean(std::string section, std::string name, bool default_value);
+
+    template <int M>
+    SimTK::Vec<M> getSimtkVec(std::string section, std::string name,
+                              SimTK::Vec<M> default_value,
+                              const char* delimiter = "\\s+") {
+        auto separate = [](std::string str, const char* delimiter) {
+            // split input string into vector of strings delimited by regex
+            std::regex ws_re(delimiter);
+            std::vector<std::string> sv{std::sregex_token_iterator(str.begin(),
+                                                                   str.end(),
+                                                                   ws_re, -1),
+                                        {}};
+            if (sv.size() != M)
+                throw std::invalid_argument(
+                        "INIReader: Received invalid argument.");
+
+            SimTK::Vec<M> vec;
+            int i = 0;
+            for (auto& token : sv) {
+                const char* value = token.c_str();
+                char* end;
+                vec[i] = (strtod(value, &end));
+                ++i;
+            }
+            return vec;
+        };
+
+        std::string key = makeKey(section, name);
+        return _values.count(key) ? separate(_values[key], delimiter)
+                                  : default_value;
+    }
     /**
      * Get a container of values from INI file separated by delimiter specified
      * as regex. Default delimiters are white-space characters. The container

@@ -7,8 +7,6 @@
 #include <OpenSim/Simulation/Model/ContactSphere.h>
 #include <OpenSim/Simulation/SimbodyEngine/WeldJoint.h>
 #include <SimTKcommon/internal/Stage.h>
-#include <Simulation/Model/Model.h>
-#include <optional>
 #include <ostream>
 
 using namespace std;
@@ -18,10 +16,8 @@ using namespace SimTK;
 
 ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
         const Model& otherModel, const Parameters& otherParameters)
-        : GaitPhaseDetector(otherParameters.windowSize), model(*otherModel.clone()),
-          parameters(otherParameters) {
-    // add elements to a copy of the original model....
-
+        : GaitPhaseDetector(otherParameters.windowSize),
+          model(*otherModel.clone()), parameters(otherParameters) {
     // platform
     auto platform = new OpenSim::Body("Platform", 1.0, Vec3(0), Inertia(0));
     model.addBody(platform);
@@ -45,18 +41,19 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
     auto leftHeelContact = new ContactSphere();
     auto rightToeContact = new ContactSphere();
     auto leftToeContact = new ContactSphere();
-    rightHeelContact->set_location(Vec3(0.012, -0.0015, -0.005));
-    leftHeelContact->set_location(Vec3(0.012, -0.0015, 0.005));
-    rightToeContact->set_location(Vec3(0.055, 0.01, -0.01));
-    leftToeContact->set_location(Vec3(0.055, 0.01, 0.01));
-    rightHeelContact->setFrame(model.getBodySet().get("calcn_r"));
-    leftHeelContact->setFrame(model.getBodySet().get("calcn_l"));
-    rightToeContact->setFrame(model.getBodySet().get("toes_r"));
-    leftToeContact->setFrame(model.getBodySet().get("toes_l"));
-    rightHeelContact->setRadius(0.01);
-    leftHeelContact->setRadius(0.01);
-    rightToeContact->setRadius(0.01);
-    leftToeContact->setRadius(0.01);
+    rightHeelContact->set_location(parameters.rHeelSphereLocation);
+    leftHeelContact->set_location(parameters.lHeelSphereLocation);
+    rightToeContact->set_location(parameters.rToeSphereLocation);
+    leftToeContact->set_location(parameters.lToeSphereLocation);
+    rightHeelContact->setFrame(
+            model.getBodySet().get(parameters.rFootBodyName));
+    leftHeelContact->setFrame(model.getBodySet().get(parameters.lFootBodyName));
+    rightToeContact->setFrame(model.getBodySet().get(parameters.rFootBodyName));
+    leftToeContact->setFrame(model.getBodySet().get(parameters.lFootBodyName));
+    rightHeelContact->setRadius(parameters.sphereRadius);
+    leftHeelContact->setRadius(parameters.sphereRadius);
+    rightToeContact->setRadius(parameters.sphereRadius);
+    leftToeContact->setRadius(parameters.sphereRadius);
     rightHeelContact->setName("RHeelContact");
     leftHeelContact->setName("LHeelContact");
     rightToeContact->setName("RToeContact");
@@ -97,6 +94,8 @@ ContactForceBasedPhaseDetector::ContactForceBasedPhaseDetector(
 
     // initialize system
     state = model.initSystem();
+
+    model.print("test.osim");
 }
 
 void ContactForceBasedPhaseDetector::updDetector(
@@ -117,6 +116,8 @@ void ContactForceBasedPhaseDetector::updDetector(
             (rightContactForce.norm() - parameters.threshold > 0) ? 1 : -1;
     double lPhase =
             (leftContactForce.norm() - parameters.threshold > 0) ? 1 : -1;
+
+    // cout <<  rightContactForce.norm() << " "  << leftContactForce.norm() << "\n";
 
     // update detector internal state
     updDetectorState(input.t, rPhase, lPhase);

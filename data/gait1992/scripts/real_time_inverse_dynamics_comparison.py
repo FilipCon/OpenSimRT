@@ -39,9 +39,9 @@ with PdfPages(output_dir + 'inverse_dynamics_comparison.pdf') as pdf:
         key = tau_reference.columns[i].replace('_moment', '').replace('_force', '')
         j = tau_rt.columns.get_loc(key)
 
-        d_tau = rmse_metric(tau_reference.iloc[:, i], tau_rt.iloc[:, j])
-        if not np.isnan(d_tau):     # NaN when siganl is zero
-            d_tau_total.append(d_tau)
+        # d_tau = rmse_metric(tau_reference.iloc[:, i], tau_rt.iloc[:, j])
+        # if not np.isnan(d_tau):     # NaN when siganl is zero
+        #     d_tau_total.append(d_tau)
 
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 4))
 
@@ -50,7 +50,7 @@ with PdfPages(output_dir + 'inverse_dynamics_comparison.pdf') as pdf:
         ax.set_xlabel('time')
         ax.set_ylabel('generalized forces (Nm | N)')
         ax.set_title(tau_rt.columns[j])
-        annotate_plot(ax, 'RMSE = ' + str(d_tau))
+        # annotate_plot(ax, 'RMSE = ' + str(d_tau))
         ax.legend(loc='lower left')
 
         fig.tight_layout()

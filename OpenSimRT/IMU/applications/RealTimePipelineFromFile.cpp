@@ -155,17 +155,11 @@ void run(char const* name) {
 
     // gait phase detector
     AccelerationBasedPhaseDetector::Parameters detectorParameters;
-    detectorParameters.accThreshold = 7;
-    detectorParameters.velThreshold = 1.9;
+    // detectorParameters.accThreshold = 7;
     detectorParameters.windowSize = 7;
     detectorParameters.rFootBodyName = "calcn_r";
     detectorParameters.lFootBodyName = "calcn_l";
-    detectorParameters.rHeelLocationInFoot =
-            SimTK::Vec3(0.014, -0.0168, -0.0055);
-    detectorParameters.rToeLocationInFoot =
-            SimTK::Vec3(0.24, -0.0168, -0.00117);
-    detectorParameters.lHeelLocationInFoot =
-            SimTK::Vec3(0.014, -0.0168, 0.0055);
+    detectorParameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
     detectorParameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
     detectorParameters.samplingFrequency = 60;
     detectorParameters.accLPFilterFreq = 5;

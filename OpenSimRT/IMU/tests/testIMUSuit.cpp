@@ -113,15 +113,12 @@ void run() {
 
     // grfm prediction with AccelerationBasedPhaseDetector
     AccelerationBasedPhaseDetector::Parameters parameters;
-    parameters.accThreshold = 7;
-    parameters.velThreshold = 1.9;
+    // parameters.accThreshold = 7;
     parameters.windowSize = 10;
     parameters.rFootBodyName = "calcn_r";
     parameters.lFootBodyName = "calcn_l";
-    parameters.rHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, -0.0055);
-    parameters.rToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
-    parameters.lHeelLocationInFoot = SimTK::Vec3(0.014, -0.0168, 0.0055);
-    parameters.lToeLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
+    // parameters.rLocationInFoot = SimTK::Vec3(0.24, -0.0168, -0.00117);
+    // parameters.lLocationInFoot = SimTK::Vec3(0.24, -0.0168, 0.00117);
     parameters.samplingFrequency = 40;
     parameters.accLPFilterFreq = 5;
     parameters.velLPFilterFreq = 5;

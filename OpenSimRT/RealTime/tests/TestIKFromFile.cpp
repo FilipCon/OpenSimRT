@@ -54,8 +54,8 @@ void run() {
                          1e-5);
     auto qLogger = ik.initializeLogger();
 
-    // visualizer
-    BasicModelVisualizer visualizer(model);
+    // // visualizer
+    // BasicModelVisualizer visualizer(model);
 
     // mean delay
     int sumDelayMS = 0;
@@ -67,17 +67,26 @@ void run() {
                 i, markerData, observationOrder, false);
 
         // perform ik
-        START_CHRONO();
-        auto pose = ik.solve(frame);
-        END_CHRONO();
+        chrono::high_resolution_clock::time_point t1;
+        t1 = chrono::high_resolution_clock::now();
 
-        // visualize
-        visualizer.update(pose.q);
+        auto pose = ik.solve(frame);
+
+        chrono::high_resolution_clock::time_point t2;
+        t2 = chrono::high_resolution_clock::now();
+        sumDelayMS +=
+                chrono::duration_cast<chrono::milliseconds>(t2 - t1).count();
+
+        // // visualize
+        // visualizer.update(pose.q);
 
         // record
         qLogger.appendRow(pose.t, ~pose.q);
         // this_thread::sleep_for(chrono::milliseconds(10));
     }
+
+    cout << "Mean delay: " << (double) sumDelayMS /  markerData.getNumFrames() << " ms"
+         << endl;
 
     // store results
     STOFileAdapter::write(qLogger,
