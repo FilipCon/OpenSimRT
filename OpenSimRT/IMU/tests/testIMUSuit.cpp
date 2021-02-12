@@ -24,6 +24,7 @@
 #include <cmath>
 #include <exception>
 #include <future>
+#include <iomanip>
 #include <iostream>
 #include <simbody/internal/Visualizer.h>
 #include <thread>
@@ -180,20 +181,11 @@ void run() {
 
             if (!ikFiltered.isValid) continue;
 
-            // grfm prediction
-            detector.updDetector({pose.t, q, qDot, qDDot});
-            auto grfmOutput = grfmPrediction.solve({pose.t, q, qDot, qDDot});
-
             // visualize
             visualizer.update(q);
-            rightGRFDecorator->update(grfmOutput[0].point, grfmOutput[0].force);
-            leftGRFDecorator->update(grfmOutput[1].point, grfmOutput[1].force);
 
             // record
             qLogger.appendRow(pose.t, ~pose.q);
-            grfRightLogger.appendRow(grfmOutput[0].t,
-                                     ~grfmOutput[0].asVector());
-            grfLeftLogger.appendRow(grfmOutput[1].t, ~grfmOutput[1].asVector());
             imuLogger.appendRow(pose.t, ~pack.second[0]);
         }
     } catch (std::exception& e) {
@@ -206,12 +198,6 @@ void run() {
                 qLogger, subjectDir + "real_time/inverse_kinematics/q.sto");
         CSVFileAdapter::write(imuLogger,
                               subjectDir + "experimental_data/ngimu_data.csv");
-        STOFileAdapter::write(
-                grfRightLogger,
-                subjectDir + "/real_time/grfm_prediction/wrench_right.sto");
-        STOFileAdapter::write(
-                grfLeftLogger,
-                subjectDir + "/real_time/grfm_prediction/wrench_left.sto");
     }
 }
 

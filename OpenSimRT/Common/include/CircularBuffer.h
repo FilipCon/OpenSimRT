@@ -15,7 +15,7 @@
 #include <functional>
 #include <mutex>
 #include <vector>
-#include <iostream>
+
 namespace OpenSimRT {
 
 /**
@@ -25,8 +25,8 @@ template <int history, typename T> class CircularBuffer {
  public:
     CircularBuffer() {
         current = 0;
-        previous = history - 1;
         startOver = false;
+        newValue = false;
         buffer.resize(history);
     }
 
@@ -44,22 +44,15 @@ template <int history, typename T> class CircularBuffer {
         {
             // lock
             std::lock_guard<std::mutex> lock(monitor);
-
             // update buffer
-            if (buffer[previous] != value) {
-                buffer[current] = value;
-                previous = current;
-                current++;
-                newValue = true;
-            }
-
+            buffer[current] = value;
+            current++;
+            newValue = true;
             if (current == history) {
                 current = 0;
-                previous = history - 1;
                 startOver = true;
             }
         }
-
         // notify after unlocking
         bufferNotEmpty.notify_one();
     }
@@ -73,7 +66,11 @@ template <int history, typename T> class CircularBuffer {
         // check if data are available to proceed
         bufferNotEmpty.wait(lock,
                             [&]() { return notEmpty(M) && newValue == true; });
-        newValue = false;
+        newValue = false; // when buffer is no longer empty, condition variable
+                          // is no longer in "wait" state, and the cosumer
+                          // thread draws data from the buffer until the buffer
+                          // is empty again.
+
         // if not empty get data
         std::vector<T> result;
         result.resize(M);
@@ -89,9 +86,8 @@ template <int history, typename T> class CircularBuffer {
 
  private:
     int current;
-    int previous;
     bool startOver;
-    bool newValue; // Don't allow "get" twice
+    bool newValue;
     std::vector<T> buffer;
     std::mutex monitor;
     std::condition_variable bufferNotEmpty;
