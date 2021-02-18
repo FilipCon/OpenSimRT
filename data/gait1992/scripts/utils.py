@@ -89,7 +89,7 @@ def annotate_plot(ax, text):
     """
     at = AnchoredText(text, frameon=True, loc='upper left')
     at.patch.set_boxstyle('round, pad=0, rounding_size=0.2')
-    at.patch.set_alpha(0.5)
+    at.patch.set_alpha(0.2)
     ax.add_artist(at)
 
 

@@ -157,7 +157,7 @@ with PdfPages(output_dir + 'id_comparison.pdf') as pdf:
 
         units = ''
         if is_deg:
-            units = ' (Nm)'
+            units = ' (N m)'
         else:
             units = ' (N)'
 

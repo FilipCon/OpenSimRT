@@ -112,7 +112,7 @@ def plotXYZ(gt_data_frame, est_data_frame, id_gt, id_est, hs_events, to_events,
         ax.set_xlabel('gait cycle (%)')
         ax.set_ylabel(y_label)
         ax.set_title(title[i])
-        ax.legend(loc='lower left')
+        ax.legend(loc='lower right')
         # # ax.grid(True)
         for hs in hs_events:
             ax.axvline(x=hs,
@@ -204,13 +204,13 @@ with PdfPages(results_dir + 'grfm_estimation.pdf') as pdf:
     id_est = right_wrench.columns.get_loc('tau_x')
     id_gt = experimental_grfm.columns.get_loc('ground_torque_x')
     plotXYZ(experimental_grfm, right_wrench, id_gt, id_est, [], [], titles[2],
-            'moment (Nm)')
+            'moment (N m)')
 
     # left
     id_est = left_wrench.columns.get_loc('tau_x')
     id_gt = experimental_grfm.columns.get_loc('1_ground_torque_x')
     plotXYZ(experimental_grfm, left_wrench, id_gt, id_est, [], [], titles[3],
-            'moment (Nm)')
+            'moment (N m)')
 
     # # point
     # right
