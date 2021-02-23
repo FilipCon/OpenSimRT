@@ -5,10 +5,12 @@ import pandas as pd
 from utils import read_from_storage, plot_sto_file, annotate_plot, to_gait_cycle
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib
 from sklearn.metrics import mean_squared_error
 
 params = {'legend.fontsize': 8,
           'legend.handlelength': 2}
+matplotlib.rcParams.update({'legend.framealpha': 0.2})
 plt.rcParams.update(params)
 
 # data
@@ -163,14 +165,14 @@ with PdfPages(output_dir + 'id_comparison.pdf') as pdf:
 
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(5, 4))
 
-        # ax.plot(tau_reference.time,
-        #         tau_reference.iloc[:, i],
-        #         label='OpenSim (after IK)',
-        #         linestyle='-')
-        ax.plot(tau_reference_rra.time,
-                tau_reference_rra.iloc[:, i],
+        ax.plot(tau_reference.time,
+                tau_reference.iloc[:, i],
                 label='OpenSim',
                 linestyle='-')
+        # ax.plot(tau_reference_rra.time,
+        #         tau_reference_rra.iloc[:, i],
+        #         label='OpenSim',
+        #         linestyle='-')
         ax.plot(tau_rt.time,
                 tau_rt.iloc[:, j],
                 label='Predicted GRF&M',

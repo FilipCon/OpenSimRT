@@ -84,10 +84,10 @@ def get_model_coordinates_in_multibody_order(model):
 
     return model_coordinates
 
-def annotate_plot(ax, text):
+def annotate_plot(ax, text, loc='upper left'):
     """Annotate a figure by adding a text.
     """
-    at = AnchoredText(text, frameon=True, loc='upper left')
+    at = AnchoredText(text, frameon=True, loc=loc)
     at.patch.set_boxstyle('round, pad=0, rounding_size=0.2')
     at.patch.set_alpha(0.2)
     ax.add_artist(at)
